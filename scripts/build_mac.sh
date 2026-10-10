@@ -66,6 +66,12 @@ pkgbuild --root "$STG/vst3" --identifier com.tsraudio.tsrphasedepthmotion.vst3 -
 pkgbuild --root "$STG/app"  --identifier com.tsraudio.tsrphasedepthmotion.app  --version "$VER" --install-location "/Applications" "$STG/app.pkg"
 PKG="$OUT/$NAME $VER (TSR Audio).pkg"
 productbuild --package "$STG/au.pkg" --package "$STG/vst3.pkg" --package "$STG/app.pkg" ${DEV_ID_INSTALLER:+--sign "$DEV_ID_INSTALLER"} "$PKG"
-pkgutil --payload-files "$PKG" | grep -E "\.component$|\.vst3$|\.app$" | tee "$OUT/contenuto_pkg.txt"
+EXP=$(mktemp -d)/x; pkgutil --expand "$PKG" "$EXP"
+: > "$OUT/contenuto_pkg.txt"
+for p in au vst3 app; do
+  loc=$(sed -n 's/.*install-location="\([^"]*\)".*/\1/p' "$EXP/$p.pkg/PackageInfo")
+  (cd "$EXP" && gzip -dc "$p.pkg/Payload" | cpio -t 2>/dev/null) | grep -E "\.(component|vst3|app)$" | sed "s#^\.#$loc#" | tee -a "$OUT/contenuto_pkg.txt"
+done
+[ "$(wc -l < "$OUT/contenuto_pkg.txt")" -eq 3 ] || { echo "ERRORE: l'installer non contiene AU, VST3 e app"; exit 1; }
 (cd "$A" && ditto -c -k --keepParent "AU/$NAME.component" "$OLDPWD/$OUT/$NAME $VER AU.zip" && ditto -c -k --keepParent "VST3/$NAME.vst3" "$OLDPWD/$OUT/$NAME $VER VST3.zip")
 echo "OK: $PKG"
