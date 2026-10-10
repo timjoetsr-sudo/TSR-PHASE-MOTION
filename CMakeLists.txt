@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.22)
-project(TSR_PHASE_DEPTH_MOTION VERSION 1.0.1)
+project(TSR_PHASE_DEPTH_MOTION VERSION 1.0.2)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -50,3 +50,14 @@ target_link_libraries(TSRPhaseDepthMotion PRIVATE TSRPDMBinary juce::juce_audio_
 
 # ---- engine tests (pure C++, no JUCE): ./EngineTests  -> "RESULT: N passed, 0 failed"
 add_executable(EngineTests tests/engine_tests.cpp)
+
+# ---- host test tool (Linux/macOS): loads the BUILT VST3 through JUCE hosting and tests it
+option(TSR_BUILD_HOSTTESTS "Build VST3 host test tool" OFF)
+if(TSR_BUILD_HOSTTESTS)
+  juce_add_console_app(HostTests PRODUCT_NAME "HostTests")
+  target_sources(HostTests PRIVATE tests/host_tests.cpp)
+  juce_generate_juce_header(HostTests)
+  target_compile_definitions(HostTests PRIVATE JUCE_PLUGINHOST_VST3=1 JUCE_WEB_BROWSER=0 JUCE_USE_CURL=0 JUCE_ALSA=0 JUCE_JACK=0)
+  target_link_libraries(HostTests PRIVATE juce::juce_audio_utils juce::juce_recommended_config_flags)
+  set_target_properties(HostTests PROPERTIES ENABLE_EXPORTS ON)
+endif()

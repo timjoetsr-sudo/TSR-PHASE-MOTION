@@ -549,6 +549,7 @@ private:
         if (byp) st = "Bypass" + kDot + "segnale originale";
         else if (deltaOn && live) st = U ("DELTA: ascolti solo ci\xc3\xb2 che il plugin aggiunge o toglie");
         else if (! live) st = "In attesa di segnale";
+        else if (reduction > 0.10f && (corrIn < 0.5f || mlIn < -1.3f)) st = U ("Stereo gi\xc3\xa0 largo \xc2\xb7 mono safety trattiene WIDTH/MOTION");
         else if (reduction > 0.10f) st = "Mono safety: movimento ridotto del " + String (roundToInt (reduction * 100)) + "%";
         else if (std::abs (appliedMs) > 0.02f) st = "Fase allineata" + kDot + String (std::abs (appliedMs), 2) + " ms";
         else if (integOut < 60.f) st = "Campo instabile" + kDot + "correlazione bassa";

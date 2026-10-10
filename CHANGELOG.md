@@ -1,3 +1,16 @@
+## 1.0.2 — WIDTH/MOTION corretti in fase, mono safety più chiaro
+
+- **WIDTH stringeva invece di allargare tra 2 e 3 kHz e MOTION si muoveva al contrario vicino al crossover.**
+  Causa: le bande LR4 hanno lo sfasamento del filtro, che a 2,5 kHz arriva a −180°. Ora la divisione in bande è complementare
+  a fase coerente (all-pass del 1° ordine a 400 Hz e 4 kHz): la somma delle bande è esattamente il segnale di ingresso.
+  Misura su ESO – SAFE (MONO SAFETY 0 %, WIDTH 150 %), canale side sopra 300 Hz: +3,04 dB (ideale +3,52) contro +1,66 dB della 1.0.1.
+- **MONO SAFETY:** con MONO SAFETY ≥ 90 % adesso tiene la correlazione ≥ 0,30 e la perdita in mono ≥ −1,5 dB anche quando WIDTH allarga davvero.
+  Sotto il 90 % i limiti si allentano; con MONO SAFETY 0 % non riduce niente.
+- **Stato più chiaro:** quando l'ingresso è già largo (correlazione < 0,5 o perdita in mono < −1,3 dB) lo stato dice
+  "Stereo già largo · mono safety trattiene WIDTH/MOTION" invece di una semplice percentuale.
+- Indicatore di riduzione stabilizzato: sale in fretta, scende lento.
+- Nuovo test T31d (stereo normale, nessuna riduzione eccessiva): EngineTests da 40 a 41.
+
 ## 1.0.1 — correzione dei risultati con le impostazioni di default
 
 Problemi trovati misurando il plugin sui tuoi stem reali (impostazioni di default) e corretti:

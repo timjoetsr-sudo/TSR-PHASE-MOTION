@@ -399,8 +399,12 @@ int main() {
         Res a = run(L, R, h);
         check(a.red < 0.02, "T31a harmless settings on wide stereo: fail-safe stays off", fmt("mean reduction=%.1f%% (corr in %.2f)", a.red * 100, a.cIn));
         Res b = run(L, R, tsr::Params());
-        check(b.red < 0.5 && b.iOut >= b.iIn - 1.0, "T31b defaults on wide healthy stereo: not blocked, integrity not lowered",
+        check(b.iOut >= b.iIn - 0.3, "T31b defaults on already-wide stereo: integrity not lowered",
               fmt("mean reduction=%.0f%%  integrity %.1f -> %.1f", b.red * 100, b.iIn, b.iOut));
+        std::vector<float> L2, R2; make(0.80f, 23, L2, R2);         // ordinary stereo (corr ~ +0.9)
+        Res b2 = run(L2, R2, tsr::Params());
+        check(b2.red < 0.2 && b2.iOut >= b2.iIn - 0.3, "T31d defaults on ordinary stereo: moves applied, integrity not lowered",
+              fmt("mean reduction=%.0f%%  integrity %.1f -> %.1f  corr %.2f", b2.red * 100, b2.iIn, b2.iOut, b2.cIn));
         make(0.30f, 22, L, R); for (auto& v : R) v = -v * 0.6f + 0.0f;   // problematic (negative correlation)
         Res c2 = run(L, R, tsr::Params());
         check(c2.cOut >= c2.cIn - 0.03 && c2.mOut >= c2.mIn - 0.10, "T31c defaults never degrade already-problematic stereo",

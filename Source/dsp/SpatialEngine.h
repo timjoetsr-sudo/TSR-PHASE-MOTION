@@ -147,6 +147,30 @@ struct Split3 {
     void flush() { lp1.flush(); lp2.flush(); ap1.flush(); ap2.flush(); }
 };
 
+// Phase-coherent complementary split for the WIDTH / MOTION moves (1.0.2).
+// l = (x + A1 x)/2 with A1 a 1st-order all-pass -> l + (x - l) == x EXACTLY and both parts stay within +-45 deg of x
+// at their crossover, so a band gain is a real gain. (The LR4 split used before shares the all-pass phase of the
+// crossover: at 2.5 kHz the "high" band is -180 deg from the input, so WIDTH 150 % NARROWED 2-3 kHz by -5 dB and
+// MOTION panned backwards around the crossover.)
+struct AP1 {
+    double a = 0, z = 0;
+    void set(double fs, double fc) { double t = std::tan(kPi * fc / fs); a = (t - 1) / (t + 1); }
+    inline double process(double x) { double y = a * x + z; z = x - a * y; return y; }
+    void reset() { z = 0; }
+    void flush() { ftz(z); }
+};
+struct Split3C {
+    AP1 a1, a2;
+    void set(double fs, double f1, double f2) { a1.set(fs, f1); a2.set(fs, f2); }
+    inline void process(float x, float& l, float& m, float& h) {
+        double lo = 0.5 * (x + a1.process(x)), r = x - lo;
+        double mi = 0.5 * (r + a2.process(r));
+        l = (float) lo; m = (float) mi; h = (float) (r - mi);
+    }
+    void reset() { a1.reset(); a2.reset(); }
+    void flush() { a1.flush(); a2.flush(); }
+};
+
 struct DelayLine {
     std::vector<float> buf; int mask = 0, w = 0;
     void init(int maxDelay) {
@@ -392,8 +416,8 @@ public:
         aMeter = std::exp(-1.0 / (0.300 * fs));
         hpAL.highpass(fs, 200, 0.707); hpAR.highpass(fs, 200, 0.707);
         lpAL.lowpass(fs, 250, 0.707); lpAR.lowpass(fs, 250, 0.707);
-        // 1.0.1: moves (width/motion) start at 300 Hz: the LR4 skirt of a 150 Hz split leaked widening into the bass
-        splitM.set(fs, 300, 2500); splitS.set(fs, 300, 2500);
+        // moves: complementary split, 400 Hz (1st-order skirt: bass kept mono-safe) and 4 kHz (CENTER LOCK protects the lead below it)
+        splitM.set(fs, 400, 4000); splitS.set(fs, 400, 4000);
         anInM.set(fs, 150, 2500); anInS.set(fs, 150, 2500); anOutM.set(fs, 150, 2500); anOutS.set(fs, 150, 2500);
         rev.init(fs); traj.init(fs);
         daIn.init(fs); daOut.init(fs);
@@ -452,7 +476,11 @@ public:
     double allowedMonoDeltaDb(float monoSafety) const { return 0.5 + 5.5 * (1.0 - monoSafety); }
     double correlationFloor(float monoSafety) const { return -0.1 + 0.6 * monoSafety; }
     // how much the plugin may lower the correlation of material that is ALREADY below the floor (wide pads, pianos, mixes)
-    double correlationDropAllowed(float monoSafety) const { return 0.30 * (1.0 - monoSafety); }
+    // healthy-but-wide material (corr ~ +0.4) may lose a little; material near/below anti-phase (corr <= -0.1) may lose nothing
+    double correlationDropAllowed(float monoSafety, double c0) const {
+        const double health = std::max(0.0, std::min(1.0, (c0 + 0.1) / 0.5));
+        return (0.06 + 0.30 * (1.0 - monoSafety)) * health;
+    }
 
     void process(float* L, float* R, int n, const Params& p) {
         int off = 0;
@@ -501,7 +529,7 @@ private:
     const double apFreqs[kAp] = {45, 65, 90, 125, 175};
     Biquad apCur, apNew; int apCurIdx = -1, apNewIdx = -1; float apFade = 1.f;
     // spatial
-    Split3 splitM, splitS, anInM, anInS, anOutM, anOutS;
+    Split3C splitM, splitS; Split3 anInM, anInS, anOutM, anOutS;
     MotionTrajectory traj;
     DepthReverb rev;
     Biquad shL, shR; float shelfFs = -1, shelfDb = 99;
@@ -803,8 +831,13 @@ private:
         // 100 ms EMA moments, the promise holds on any 100 ms window). Material already below the floor may only lose a
         // small, MONO SAFETY-dependent amount relative to its own correlation. s = 0 always satisfies both constraints
         // (bug fixed in 1.0.1: the old rule could require the correlation to RISE, blocking every move on wide material).
-        const double target = std::min(floorC + 0.06, c0 - correlationDropAllowed(monoSafety));
-        auto ok = [&](double s) { double ml, c; eval(s, ml, c); return (ml - ml0) >= -allowed - 1e-9 && c >= target - 1e-9; };
+        // never push healthy stereo below +0.30 (where the integrity score starts to fall); below that, no extra drop
+        const double target = std::min(floorC + 0.06, std::max(c0 - correlationDropAllowed(monoSafety, c0), std::min(c0, 0.30 - std::max(0.0, 0.9 - (double) monoSafety)))) - 0.005;
+        // mono cost: at most MONO SAFETY's allowance, and never past -1.5 dB of mono loss (where the integrity score starts
+        // to fall) unless the input was already there -- then no extra mono loss at all ("non allargare indiscriminatamente")
+        // (guards are exact at MONO SAFETY >= 90 % and relax below it, off at 0 %); 0.02 dB / 0.005 = numerical tolerance
+        const double mlTarget = std::max(ml0 - allowed, std::min(ml0, -1.5 - 10.0 * std::max(0.0, 0.9 - (double) monoSafety))) - 0.02;
+        auto ok = [&](double s) { double ml, c; eval(s, ml, c); return ml >= mlTarget - 1e-9 && c >= target - 1e-9; };
         double ml1, c1; eval(1, ml1, c1);
         meters.predictedMonoDeltaDb.store((float) (ml1 - ml0));
         meters.allowedMonoDeltaDb.store((float) allowed);
