@@ -1,0 +1,8 @@
+build/
+build-*/
+dist/
+JUCE/
+*.f32
+*.wav
+*.mp3
+.tools/

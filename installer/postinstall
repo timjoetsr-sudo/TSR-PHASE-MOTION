@@ -1,0 +1,10 @@
+#!/bin/bash
+# Rimuove eventuali copie per-utente installate in passato con INSTALLA.command (evita doppioni nella DAW)
+U=$(/usr/bin/stat -f%Su /dev/console 2>/dev/null || true)
+if [ -n "$U" ] && [ "$U" != "root" ] && [ -d "/Users/$U" ]; then
+  rm -rf "/Users/$U/Library/Audio/Plug-Ins/Components/TSR PHASE DEPTH MOTION.component" \
+         "/Users/$U/Library/Audio/Plug-Ins/VST3/TSR Audio/TSR PHASE DEPTH MOTION.vst3" \
+         "/Users/$U/Library/Audio/Plug-Ins/VST3/TSR PHASE DEPTH MOTION.vst3"
+fi
+/usr/bin/killall -9 AudioComponentRegistrar 2>/dev/null || true
+exit 0

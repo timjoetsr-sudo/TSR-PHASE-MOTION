@@ -1,0 +1,49 @@
+# TSR PHASE · DEPTH · MOTION (TSR Audio) · build, test e installer su un Mac di GitHub ad ogni push su main.
+# Installer .pkg: pagina Releases (v<versione>) e artefatto "TSR-PHASE-MOTION-mac" nella pagina Actions.
+# Log e risultati copiati anche nel ramo "ci-out".
+name: TSR PHASE MOTION macOS
+on: [push, workflow_dispatch]
+permissions:
+  contents: write
+jobs:
+  mac:
+    if: github.ref == 'refs/heads/main'
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4
+      - name: pluginval
+        run: |
+          curl -sL -o pv.zip https://github.com/Tracktion/pluginval/releases/latest/download/pluginval_macOS.zip
+          unzip -q pv.zip -d /Applications
+      - name: Build, test, firma ad-hoc, auval, pluginval, pkg
+        id: build
+        continue-on-error: true
+        run: |
+          mkdir -p dist
+          set -o pipefail
+          ./scripts/build_mac.sh 2>&1 | tee dist/build_log.txt
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: TSR-PHASE-MOTION-mac
+          path: dist/
+      - name: Release con l'installer
+        if: steps.build.outcome == 'success'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          VER=$(sed -n 's/^project(TSR_PHASE_DEPTH_MOTION VERSION \([0-9.]*\).*/\1/p' CMakeLists.txt)
+          gh release view "v$VER" >/dev/null 2>&1 || gh release create "v$VER" --title "TSR PHASE · DEPTH · MOTION $VER" --notes-file CHANGELOG.md
+          gh release upload "v$VER" dist/*.pkg dist/*.zip --clobber
+      - name: Copia risultati nel ramo ci-out
+        if: always()
+        run: |
+          echo "esito: ${{ steps.build.outcome }} · commit ${GITHUB_SHA} · $(date -u)" > dist/ESITO.txt
+          rm -f dist/*.pkg dist/*.zip
+          mkdir -p /tmp/out && cp -R dist/. /tmp/out/
+          cd /tmp/out && git init -q && git checkout -q -b ci-out
+          git -c user.name=ci -c user.email=ci@tsraudio add -A && git -c user.name=ci -c user.email=ci@tsraudio commit -qm "CI ${GITHUB_SHA}"
+          git push -f "https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}" ci-out
+      - name: Esito
+        if: steps.build.outcome != 'success'
+        run: exit 1
