@@ -19,7 +19,7 @@ cmake -S . -B build-mac -DCMAKE_BUILD_TYPE=Release -DCMAKE_OSX_ARCHITECTURES="ar
 
 echo "== 2/7 build AU, VST3, Standalone, test =="
 cmake --build build-mac --config Release -j"$(sysctl -n hw.ncpu)" \
-  --target TSRPhaseDepthMotion_AU TSRPhaseDepthMotion_VST3 TSRPhaseDepthMotion_Standalone EngineTests
+  --target TSRPhaseDepthMotion_AU TSRPhaseDepthMotion_VST3 TSRPhaseDepthMotion_Standalone EngineTests EngineBench
 A="build-mac/TSRPhaseDepthMotion_artefacts/Release"
 AU="$A/AU/$NAME.component"; VST="$A/VST3/$NAME.vst3"; APP="$A/Standalone/$NAME.app"
 for b in "$AU" "$VST" "$APP"; do [ -d "$b" ] || { echo "ERRORE: manca $b"; exit 1; }; done
@@ -29,6 +29,8 @@ grep -q arm64 "$OUT/architetture.txt" && grep -q x86_64 "$OUT/architetture.txt" 
 echo "== 3/7 test del motore DSP =="
 "build-mac/EngineTests" | tee "$OUT/test_dsp.txt"
 grep -q "RESULT: [0-9]* passed, 0 failed" "$OUT/test_dsp.txt" || { echo "ERRORE: test DSP falliti"; exit 1; }
+echo "== 3b/7 benchmark CPU 1.0.2 vs attuale (stesso Mac) =="
+"build-mac/EngineBench" | tee "$OUT/benchmark_cpu.txt"
 
 echo "== 4/7 produttore e firma =="
 VENDOR=$(/usr/libexec/PlistBuddy -c 'Print :AudioComponents:0:name' "$AU/Contents/Info.plist")

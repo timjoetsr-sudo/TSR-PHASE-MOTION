@@ -36,6 +36,7 @@ TSRProcessor::TSRProcessor()
     for (int i = 0; i < 12; ++i) p[i] = apvts.getRawParameterValue (order[i]);
     bypassParam = apvts.getParameter (ids::bypass);
     for (int i = 0; i < Scope::N; ++i) { sc.inM[i] = 0.f; sc.inS[i] = 0.f; sc.outM[i] = 0.f; sc.outS[i] = 0.f; }
+    engine.setMetersActive (false);   // no window yet
 }
 
 bool TSRProcessor::isBusesLayoutSupported (const BusesLayout& layouts) const
@@ -78,6 +79,7 @@ void TSRProcessor::runEngine (juce::AudioBuffer<float>& buffer, bool forceBypass
             if (auto bpm = pos->getBpm()) q.bpm = *bpm;
 
     float* L = buffer.getWritePointer (0); float* R = buffer.getWritePointer (1); const int n = buffer.getNumSamples();
+    if (openEditors.load (std::memory_order_relaxed) == 0) { engine.process (L, R, n, q); return; }   // no window: no scope feed
     // scope: same ring positions for input (before) and output (after)
     const int w0 = sc.w.load (std::memory_order_relaxed), ph0 = scPhase;
     int w = w0, ph = ph0;

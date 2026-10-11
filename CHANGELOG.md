@@ -1,3 +1,44 @@
+## 1.0.3 — PHASE più preciso e più stabile, meno CPU, automazioni pulite
+
+Tutto misurato contro la 1.0.2 sulla stessa macchina, con una copia congelata del motore 1.0.2 (`tests/ref/`).
+
+- **PHASE: il canale corretto non perde più gli alti.** L'interpolatore del ritardo frazionario passa da Lagrange
+  di 3° ordine a windowed-sinc a 32 punti (Kaiser β = 7, tabella da 512 fasi). Ritardo di 9,5 campioni (caso peggiore):
+  a 48 kHz il canale corretto perdeva −3,25 dB a 16 kHz e −8,42 dB a 20 kHz, ora +0,01 e 0,00 dB;
+  a 44,1 kHz, a 20 kHz, da −13,28 a −0,57 dB.
+- **Latenza riportata all'host: da 2 a 15 campioni** (0,31 ms a 48 kHz). È il costo del nuovo interpolatore; la DAW la compensa.
+- **PHASE: stima del ritardo più precisa.** Picco della correlazione interpolato in banda limitata: errore sui ritardi
+  a quarti di campione da 0,107 a 0,033 campioni.
+- **PHASE: correlazione normalizzata per ritardo.** Sulla hi-hat ripresa con 2 microfoni (R in ritardo di 9,5 campioni,
+  COHERENCE 100 %) la 1.0.2 calcolava correlazioni fino a 152 (il massimo possibile è 1) e perdeva l'aggancio in 718 blocchi
+  su 5249; la 1.0.3 in 123. Correlazione L/R del risultato 0,888 → 0,998; bilancio L/R 16–20 kHz −4,06 → −0,07 dB.
+- **PHASE non insegue più ritardi che cambiano nota per nota:** corregge solo se anche la media di 4 s conferma il ritardo.
+  Stem PIANO (188 s, default): 12 episodi di correzione → 0.
+  Costo: un ritardo nuovo che compare dopo 20 s di materiale allineato si aggancia in 4,2 s invece di 1,2 s.
+  Avvio a freddo (1,3 s) e rilascio (0,8 s) invariati.
+- **Automazione di DEPTH e MIX senza click:** i filtri si ricalcolano in modo continuo. Energia sopra 4 kHz con il
+  parametro commutato min↔max ogni 250 ms: DEPTH −70,99 → −108,93 dB, MIX −72,55 → −118,65 dB.
+- **Sample rate sotto 11 kHz:** le frequenze dei filtri restano sotto Nyquist. A 8 kHz la 1.0.2 produceva 47.691 campioni
+  NaN in 6 s (default); la 1.0.3 nessuno.
+- **CPU.** Meter e vettorscopio calcolati solo con la finestra aperta; filtri dei meter in 4 corsie parallele; prime
+  riflessioni e filtri in cache; analisi PHASE distribuita su più blocchi. 48 kHz, blocco 512, default (Xeon 2,1 GHz, Linux):
+  2,25 % di un core → 1,91 % con la finestra aperta (−15 %), 1,31 % con la finestra chiusa (−42 %).
+  Blocco peggiore a 96 kHz / 32 campioni, tutto al massimo: 14,2 % → 5,6 % del tempo del blocco.
+  Istruzioni eseguite (callgrind, 20 s di mix): 3,81 → 3,34 miliardi (finestra aperta), 2,48 miliardi (finestra chiusa).
+  Lo script del Mac esegue lo stesso confronto su Apple Silicon (`benchmark_cpu.txt`).
+- **Suono invariato dove PHASE non interviene:** null test su 20 stem, ai default e tutto al massimo: campioni identici
+  bit per bit, o differenze sotto −480 dBFS dovute solo al punto in cui scatta la protezione dai numeri subnormali.
+  Unica differenza voluta: PIANO, perché la 1.0.3 non applica le correzioni nota per nota.
+- Nuovi test T32–T40: EngineTests da 41 a 51.
+
+Non cambiato, di proposito:
+- Riverbero DEPTH (4 linee), risposta all'impulso identica alla 1.0.2: densità d'eco bassa all'inizio (densità d'eco
+  normalizzata ≤ 0,33 fino a 80 ms, coda densa solo da ~190 ms). Cambiarlo cambierebbe il carattere.
+- MONO SAFETY su materiale molto largo: fino a ~30 riduzioni brusche al minuto (PERCUSION LOOP). Un hold provato
+  peggiorava le percussioni e non è stato applicato.
+- Ai default DEPTH scurisce gli alti (−2,5 dB a 8 kHz, −2,9 dB da 12 a 20 kHz) e alza di +0,4…+0,6 dB sotto i 2 kHz per
+  compensare il livello: è il comportamento di progetto, uguale alla 1.0.2.
+
 ## 1.0.2 — WIDTH/MOTION corretti in fase, mono safety più chiaro
 
 - **WIDTH stringeva invece di allargare tra 2 e 3 kHz e MOTION si muoveva al contrario vicino al crossover.**

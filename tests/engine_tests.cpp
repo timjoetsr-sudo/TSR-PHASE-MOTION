@@ -1,5 +1,7 @@
 // TSR PHASE · DEPTH · MOTION — engine test suite (no framework, prints measured values)
 #include "../Source/dsp/SpatialEngine.h"
+#include "ref/SpatialEngine_v102.h"   // 1.0.2 engine (namespace tsr_v102), reference for T37
+#include <complex>
 #include <chrono>
 #include <cstdio>
 #include <functional>
@@ -7,6 +9,7 @@
 #include <random>
 
 using namespace tsr;
+static const int LAT = kBaseLatency;   // reported latency (15 samples since 1.0.3)
 static int gFail = 0, gPass = 0;
 static void check(bool ok, const char* name, const std::string& detail) {
     std::printf("[%s] %-58s %s\n", ok ? "PASS" : "FAIL", name, detail.c_str());
@@ -58,15 +61,15 @@ int main() {
         SpatialEngine e; e.prepare(fs, 512);
         Buf L0 = noise(N, 1), R0 = noise(N, 2), L = L0, R = R0;
         run(e, L, R, neutral());
-        double err = std::max(maxErrDelayed(L, L0, 2), maxErrDelayed(R, R0, 2));
-        check(err < 1e-6, "T01 neutral params = identity (latency 2 samples)", fmt("max|err|=%.3g", err));
+        double err = std::max(maxErrDelayed(L, L0, LAT), maxErrDelayed(R, R0, LAT));
+        check(err < 1e-6, "T01 neutral params = identity (latency = reported)", fmt("max|err|=%.3g", err));
     }
     {
         SpatialEngine e; e.prepare(fs, 512);
         Params p; p.mix = 0; p.coherence = 1; p.depth = 1; p.width = 2; p.motion = 1;  // everything cranked, MIX 0
         Buf L0 = noise(N, 3), R0 = sincDelay(L0, 13.3), L = L0, R = R0;
         run(e, L, R, p);
-        double err = std::max(maxErrDelayed(L, L0, 2), maxErrDelayed(R, R0, 2));
+        double err = std::max(maxErrDelayed(L, L0, LAT), maxErrDelayed(R, R0, LAT));
         check(err < 1e-6, "T02 MIX 0% = identity even with all moves at max", fmt("max|err|=%.3g", err));
     }
     {
@@ -74,7 +77,7 @@ int main() {
         Buf imp((size_t) 4800, 0.f), z((size_t) 4800, 0.f); imp[100] = 1.f; Buf L = imp, R = z;
         run(e, L, R, neutral());
         int at = -1; for (size_t i = 0; i < L.size(); ++i) if (std::fabs(L[i]) > 0.5f) { at = (int) i; break; }
-        check(at == 102 && e.latencySamples() == 2, "T03 reported latency matches measured impulse delay", fmt("impulse@%.0f expected 102, reported=%.0f", at, e.latencySamples()));
+        check(at == 100 + LAT && e.latencySamples() == 15, "T03 reported latency matches measured impulse delay", fmt("impulse@%.0f expected %.0f, reported=%.0f", at, 100 + LAT, e.latencySamples()));
     }
     // ---------------------------------------------------------------- ENGINE 1: PHASE
     for (double srT : {44100.0, 48000.0, 96000.0}) {
@@ -95,7 +98,7 @@ int main() {
         Buf L0 = lowpassed(noise(N, 6), fs, 18000), R0 = sincDelay(L0, 20.4), L = L0, R = R0;
         Params p = neutral(); p.coherence = 0;
         run(e, L, R, p);
-        double err = std::max(maxErrDelayed(L, L0, 2), maxErrDelayed(R, R0, 2));
+        double err = std::max(maxErrDelayed(L, L0, LAT), maxErrDelayed(R, R0, LAT));
         check(err < 1e-6 && std::fabs(e.meters.appliedDelayMs.load()) < 1e-9, "T05 COHERENCE 0 -> no phase correction applied",
               fmt("detected=%.3f ms applied=%.3g ms err=%.2g", e.meters.lagMs.load(), e.meters.appliedDelayMs.load(), err));
     }
@@ -140,7 +143,7 @@ int main() {
             double worstDml = 0, worstC = 1;
             run(e, L, R, p);
             for (size_t a = (size_t) (0.5 * fs); a + 4800 <= (size_t) N; a += 4800) {
-                St si = stats(L0, R0, a - 2, a + 4800 - 2), so = stats(L, R, a, a + 4800);
+                St si = stats(L0, R0, a - LAT, a + 4800 - LAT), so = stats(L, R, a, a + 4800);
                 worstDml = std::min(worstDml, monoLoss(so) - monoLoss(si)); worstC = std::min(worstC, corr(so));
             }
             double allowed = e.allowedMonoDeltaDb(ms), floorC = e.correlationFloor(ms);
@@ -162,7 +165,7 @@ int main() {
         auto [L0, R0] = stereoMix(13, 0.7f);
         SpatialEngine e; e.prepare(fs, 512); Buf L = L0, R = R0; Params p = neutral(); p.width = 2; p.motion = 1; p.centerLock = 0; p.monoSafety = 0;
         run(e, L, R, p);
-        double m = 0; for (int i = 2; i < N; ++i) m = std::max(m, (double) std::fabs((L[(size_t) i] + R[(size_t) i]) - (L0[(size_t) i - 2] + R0[(size_t) i - 2])));
+        double m = 0; for (int i = LAT; i < N; ++i) m = std::max(m, (double) std::fabs((L[(size_t) i] + R[(size_t) i]) - (L0[(size_t) (i - LAT)] + R0[(size_t) (i - LAT)])));
         check(m < 1e-5, "T11 width+motion never change the mono sum (L+R)", fmt("max|dMono|=%.3g", m));
     }
     {
@@ -251,7 +254,7 @@ int main() {
         auto [L0, R0] = stereoMix(21, 0.3f);
         SpatialEngine e; e.prepare(fs, 512); Buf L = L0, R = R0; Params p = neutral(); p.depth = 1; p.centerLock = 0; p.depthGuard = 0; p.earlyLate = 0; p.monoSafety = 1;
         double worst = 0; run(e, L, R, p);
-        for (size_t a = (size_t) (0.5 * fs); a + 4800 <= (size_t) N; a += 4800) { St si = stats(L0, R0, a - 2, a + 4800 - 2), so = stats(L, R, a, a + 4800); worst = std::min(worst, monoLoss(so) - monoLoss(si)); }
+        for (size_t a = (size_t) (0.5 * fs); a + 4800 <= (size_t) N; a += 4800) { St si = stats(L0, R0, a - LAT, a + 4800 - LAT), so = stats(L, R, a, a + 4800); worst = std::min(worst, monoLoss(so) - monoLoss(si)); }
         check(worst >= -e.allowedMonoDeltaDb(1) - 0.15, "T19 fail-safe also bounds DEPTH reflections in mono", fmt("worst dMono=%.2f dB (lim -%.2f)", worst, e.allowedMonoDeltaDb(1)));
     }
     // ---------------------------------------------------------------- monitor / bypass / robustness
@@ -261,18 +264,18 @@ int main() {
         SpatialEngine a, b; a.prepare(fs, 512); b.prepare(fs, 512);
         Buf La = L0, Ra = R0, Lb = L0, Rb = R0; Params pd = p; pd.monitor = MON_DELTA;
         run(a, La, Ra, p); run(b, Lb, Rb, pd);
-        double m = 0; for (int i = 2; i < N; ++i) m = std::max(m, (double) std::fabs(Lb[(size_t) i] + L0[(size_t) i - 2] - La[(size_t) i]));
+        double m = 0; for (int i = LAT; i < N; ++i) m = std::max(m, (double) std::fabs(Lb[(size_t) i] + L0[(size_t) (i - LAT)] - La[(size_t) i]));
         SpatialEngine c; c.prepare(fs, 512); Buf Lc = L0, Rc = R0; Params po = p; po.monitor = MON_ORIGINAL; run(c, Lc, Rc, po);
-        double mo = std::max(maxErrDelayed(Lc, L0, 2), maxErrDelayed(Rc, R0, 2));
+        double mo = std::max(maxErrDelayed(Lc, L0, LAT), maxErrDelayed(Rc, R0, LAT));
         check(m < 1e-5 && mo < 1e-7, "T20 MONITOR: DELTA = TSR - ORIGINAL, ORIGINAL = input", fmt("delta err=%.3g original err=%.3g", m, mo));
     }
     {
         auto [L0, R0] = stereoMix(31, 0.5f);
         SpatialEngine e; e.prepare(fs, 512); Buf L = L0, R = R0; Params p; p.bypass = true;
         run(e, L, R, p);
-        double err = std::max(maxErrDelayed(L, L0, 2), maxErrDelayed(R, R0, 2));
+        double err = std::max(maxErrDelayed(L, L0, LAT), maxErrDelayed(R, R0, LAT));
         // bypass engaged from the first sample fades from processed over 20 ms -> check after 30 ms
-        double err2 = 0; for (size_t i = (size_t) (0.03 * fs); i < (size_t) N; ++i) err2 = std::max(err2, (double) std::fabs(L[i] - L0[i - 2]));
+        double err2 = 0; for (size_t i = (size_t) (0.03 * fs); i < (size_t) N; ++i) err2 = std::max(err2, (double) std::fabs(L[i] - L0[i - (size_t) LAT]));
         check(err2 < 1e-7, "T21 BYPASS = latency-compensated input", fmt("err after fade=%.3g (whole=%.3g)", err2, err));
     }
     {
@@ -290,7 +293,7 @@ int main() {
         bool ok = true; std::string d;
         for (int bs : {1, 7, 64, 333, 4096}) {
             SpatialEngine e; e.prepare(fs, bs); Buf L = L0, R = R0; run(e, L, R, neutral(), bs);
-            double err = maxErrDelayed(L, L0, 2); ok &= err < 1e-6;
+            double err = maxErrDelayed(L, L0, LAT); ok &= err < 1e-6;
             SpatialEngine e2; e2.prepare(fs, bs); Buf L2 = L0, R2 = R0; Params p; run(e2, L2, R2, p, bs);
             for (float v : L2) ok &= std::isfinite(v);
             d += fmt("bs%.0f:%.1g ", bs, err);
@@ -409,6 +412,144 @@ int main() {
         Res c2 = run(L, R, tsr::Params());
         check(c2.cOut >= c2.cIn - 0.03 && c2.mOut >= c2.mIn - 0.10, "T31c defaults never degrade already-problematic stereo",
               fmt("corr %+.3f -> %+.3f  mono loss %+.2f -> %+.2f dB", c2.cIn, c2.cOut, c2.mIn, c2.mOut));
+    }
+    // ---------------------------------------------------------------- 1.0.3
+    {   // T32: sample rates below 22 kHz (1.0.2: NaN/Inf at 8 kHz, filter corners above Nyquist)
+        bool ok = true; std::string d;
+        for (double sr : {8000.0, 11025.0, 16000.0}) for (int mx = 0; mx < 2; ++mx) {
+            SpatialEngine e; e.prepare(sr, 512); Params p;
+            if (mx) { p.coherence = 1; p.depth = 1; p.earlyLate = 1; p.width = 2; p.motion = 1; p.monoSafety = 0; p.centerLock = 0; p.depthGuard = 0; }
+            Buf L = noise((int) sr * 4, 80 + (uint64_t) mx, 0.2f), R = noise((int) sr * 4, 90 + (uint64_t) mx, 0.2f);
+            for (size_t i = 0; i < L.size(); ++i) R[i] = 0.6f * L[i] + 0.4f * R[i];
+            run(e, L, R, p); double pk = 0; bool fin = true;
+            for (size_t i = 0; i < L.size(); ++i) { fin &= std::isfinite(L[i]) && std::isfinite(R[i]); if (fin) pk = std::max(pk, (double) std::max(std::fabs(L[i]), std::fabs(R[i]))); }
+            ok &= fin && pk < 5.0; d += fmt("%.0fHz/", sr) + (mx ? "max" : "def") + (fin ? fmt(":%.2f ", pk) : std::string(":NaN "));
+        }
+        check(ok, "T32 8 / 11 / 16 kHz: finite, bounded (default + max)", d + "(peak)");
+    }
+    auto xspec = [](const Buf& x, const Buf& y, size_t a, size_t b, double sr, double f) {   // |Sxy| / Sxx in dB (Hann, Welch)
+        const int Nw = 4096; std::complex<double> sxy = 0; double sxx = 0;
+        std::vector<std::complex<double>> ph((size_t) Nw); for (int i = 0; i < Nw; ++i) ph[(size_t) i] = std::polar(1.0, -2 * kPi * f / sr * i);
+        for (size_t s0 = a; s0 + Nw <= b; s0 += Nw / 2) { std::complex<double> X = 0, Y = 0;
+            for (int i = 0; i < Nw; ++i) { double w = 0.5 - 0.5 * std::cos(2 * kPi * i / Nw); X += w * (double) x[s0 + (size_t) i] * ph[(size_t) i]; Y += w * (double) y[s0 + (size_t) i] * ph[(size_t) i]; }
+            sxy += std::conj(X) * Y; sxx += std::norm(X); }
+        return 20 * std::log10(std::abs(sxy) / sxx);
+    };
+    for (double sr : {44100.0, 48000.0}) {   // T33: PHASE fractional delay keeps the top end (1.0.2: -3.3 dB @16 kHz on the corrected channel)
+        const int n = (int) (sr * 8);
+        Buf L0 = noise(n, 120), R0 = sincDelay(L0, 9.5), L = L0, R = R0;   // worst case: half a sample
+        SpatialEngine e; e.prepare(sr, 512); Params p = neutral(); p.coherence = 1; run(e, L, R, p);
+        double worst = 0; std::string d;
+        for (double f : {10000.0, 14000.0, 16000.0, 18000.0}) {
+            double gL = xspec(L0, L, (size_t) (4 * sr), (size_t) (n - 8192), sr, f), gR = xspec(R0, R, (size_t) (4 * sr), (size_t) (n - 8192), sr, f);
+            worst = std::max(worst, std::fabs(gL - gR)); d += fmt("%.0fk:%+.3f ", f / 1000, gL - gR);
+        }
+        char nm[96]; std::snprintf(nm, sizeof nm, "T33 PHASE half-sample delay flat to 18 kHz @%.1fk", sr / 1000);
+        check(worst < 0.05 && std::fabs(e.meters.lagMs.load() - 9.5 / sr * 1000) < 0.002, nm, d + fmt("(L-R dB) lag %.4f ms", e.meters.lagMs.load()));
+    }
+    {   // T34: DEPTH and MIX automation without HF artefacts (1.0.2: -71 / -72 dB from 0.05 dB shelf coefficient steps)
+        auto art = [&](int which) {
+            const int n = (int) (fs * 6); Buf L((size_t) n), R((size_t) n);
+            for (int i = 0; i < n; ++i) { L[(size_t) i] = (float) (0.4 * std::sin(2 * kPi * 220 * i / fs)); R[(size_t) i] = (float) (0.4 * std::sin(2 * kPi * 220 * i / fs + 0.6)); }
+            SpatialEngine e; e.prepare(fs, 64); Params p;
+            for (int s0 = 0; s0 < n; s0 += 64) { bool hi = ((s0 / (int) (0.25 * fs)) & 1) != 0; if (which == 0) p.depth = hi; else p.mix = hi; e.process(L.data() + s0, R.data() + s0, std::min(64, n - s0), p); }
+            Biquad h[4], g[4]; for (auto& q : h) q.highpass(fs, 4000, 0.707); for (auto& q : g) q.highpass(fs, 4000, 0.707);
+            double eh = 0, et = 0;
+            for (int i = 0; i < n - 64; ++i) { float x = L[(size_t) i], y = R[(size_t) i]; for (auto& q : h) x = q.process(x); for (auto& q : g) y = q.process(y);
+                if (i >= (int) fs) { eh += (double) x * x + (double) y * y; et += (double) L[(size_t) i] * L[(size_t) i] + (double) R[(size_t) i] * R[(size_t) i]; } }
+            return 10 * std::log10(eh / et + 1e-300);
+        };
+        double d0 = art(0), d1 = art(1);
+        check(d0 < -100 && d1 < -100, "T34 DEPTH / MIX automation: no HF artefacts", fmt("HF(>4k)/total: DEPTH %.1f dB  MIX %.1f dB", d0, d1));
+    }
+    {   // T35: meters off (no editor open) -> audio bit-identical
+        auto [L0, R0] = stereoMix(140, 0.6f);
+        SpatialEngine a, b; a.prepare(fs, 512); b.prepare(fs, 512); b.setMetersActive(false); Params p;
+        Buf La = L0, Ra = R0, Lb = L0, Rb = R0; run(a, La, Ra, p); run(b, Lb, Rb, p);
+        long diff = 0; for (size_t i = 0; i < La.size(); ++i) diff += (La[i] != Lb[i]) + (Ra[i] != Rb[i]);
+        check(diff == 0, "T35 meters off -> identical audio", fmt("differing samples=%.0f of %.0f", (double) diff, 2.0 * La.size()));
+    }
+    {   // T36: defaults are block-size independent (bit-identical for any host buffer)
+        auto [L0, R0] = stereoMix(150, 0.6f);
+        Buf Lr = L0, Rr = R0; { SpatialEngine e; e.prepare(fs, 512); run(e, Lr, Rr, Params(), 512); }
+        long diff = 0; std::string d;
+        for (int bs : {1, 7, 64, 333, 4096}) { SpatialEngine e; e.prepare(fs, bs); Buf L = L0, R = R0; run(e, L, R, Params(), bs);
+            long k = 0; for (size_t i = 0; i < L.size(); ++i) k += (L[i] != Lr[i]) + (R[i] != Rr[i]); diff += k; d += fmt("bs%.0f:%.0f ", bs, (double) k); }
+        check(diff == 0, "T36 defaults: bit-identical for block sizes 1..4096", d + "(differing samples)");
+    }
+    {   // T37: 1.0.3 == 1.0.2 (output delayed by the 13 extra samples of latency) whenever no fractional PHASE delay is applied
+        bool ok = true; std::string d;
+        for (int cfg = 0; cfg < 3; ++cfg) {
+            auto [L0, R0] = stereoMix(160 + (uint64_t) cfg, 0.7f);
+            Params p; tsr_v102::Params q;
+            if (cfg == 1) { p.mode = MODE_MUSIC; q.mode = tsr_v102::MODE_MUSIC; }
+            if (cfg == 2) { p.coherence = q.coherence = 1; p.depth = q.depth = 1; p.earlyLate = q.earlyLate = 1; p.width = q.width = 2; p.motion = q.motion = 1;
+                            p.monoSafety = q.monoSafety = 0.5f; p.centerLock = q.centerLock = 0; p.depthGuard = q.depthGuard = 0.3f; }
+            SpatialEngine a; a.prepare(fs, 512); tsr_v102::SpatialEngine b; b.prepare(fs, 512);
+            Buf La = L0, Ra = R0, Lb = L0, Rb = R0; run(a, La, Ra, p);
+            for (size_t o = 0; o < Lb.size(); o += 512) b.process(Lb.data() + o, Rb.data() + o, (int) std::min<size_t>(512, Lb.size() - o), q);
+            const int sh = a.latencySamples() - b.latencySamples(); long k = 0;
+            for (size_t i = 0; i + (size_t) sh < La.size(); ++i) k += (La[i + (size_t) sh] != Lb[i]) + (Ra[i + (size_t) sh] != Rb[i]);
+            ok &= k == 0 && a.meters.appliedDelayMs.load() == 0.f; d += fmt("cfg%.0f:%.0f ", cfg, (double) k);
+        }
+        check(ok, "T37 1.0.3 == 1.0.2 bit for bit (no PHASE delay in use)", d + "(differing samples)");
+    }
+    {   // T38: lag estimate precision (1.0.2 parabola: 0.107 samples off at quarter-sample lags)
+        double worst = 0; std::string d;
+        for (double D : {4.25, 20.75, 13.3}) {
+            Buf L0 = noise(N, 170), R0 = sincDelay(L0, D), L = L0, R = R0; SpatialEngine e; e.prepare(fs, 512); Params p = neutral(); p.coherence = 1; run(e, L, R, p);
+            double err = e.meters.lagMs.load() * fs / 1000 - D; worst = std::max(worst, std::fabs(err)); d += fmt("%.2f:%+.4f ", D, err);
+        }
+        check(worst < 0.05, "T38 sub-sample lag estimate within 0.05 samples", d + "(error, samples)");
+    }
+    {   // T39: spaced-pair recording (note-dependent inter-channel delays): PHASE must not chase every note (1.0.2 did)
+        auto spaced = [&](unsigned seed, Buf& L, Buf& R) {
+            const double secs = 40; long n = (long) (fs * secs); L.assign((size_t) n, 0.f); R.assign((size_t) n, 0.f);
+            std::mt19937 rng(seed); std::uniform_real_distribution<double> u(0, 1); std::normal_distribution<double> nd(0, 1); double t = 0;
+            while (t < secs - 1.5) {
+                double dur = 0.4 + 0.8 * u(rng), d = -20 + 40 * u(rng), g = 0.6 + 0.4 * u(rng), f0 = 150 + 900 * u(rng);
+                long a = (long) (t * fs), len = (long) (dur * fs); double ph[6]; for (auto& q : ph) q = 2 * kPi * u(rng);
+                std::vector<double> x((size_t) (len + 64));
+                for (long i = 0; i < len + 64; i++) { double tt = i / fs, env = std::exp(-3.0 * tt / dur) * (1 - std::exp(-tt / 0.005)); double v = 0;
+                    for (int h = 1; h <= 6; h++) { v += std::sin(2 * kPi * f0 * h * tt + ph[h - 1]) / h; }
+                    x[(size_t) i] = 0.15 * env * v + 0.01 * env * nd(rng); }
+                const int K = 32; const int di = (int) std::floor(d); const double fr = d - di;
+                for (long i = 0; i < len && a + i < n; i++) {
+                    L[(size_t) (a + i)] += (float) (g * x[(size_t) (i + 32)]); double acc = 0;
+                    for (int k = -K; k < K; k++) { long idx = i + 32 - di - k; if (idx < 0 || idx >= (long) x.size()) continue; double tt = k - fr;
+                        double sn = std::fabs(tt) < 1e-12 ? 1 : std::sin(kPi * tt) / (kPi * tt); acc += x[(size_t) idx] * sn * 0.5 * (1 + std::cos(kPi * tt / (K + 1))); }
+                    R[(size_t) (a + i)] += (float) ((1.6 - g) * acc);
+                }
+                t += 0.25 + 0.5 * u(rng);
+            }
+        };
+        Buf L0, R0; spaced(4, L0, R0);
+        auto episodes = [&](auto& e, auto p, double& frac) { Buf L = L0, R = R0; int ep = 0; bool on = false; long act = 0, tot = 0;
+            for (size_t o = 0; o < L.size(); o += 256) { e.process(L.data() + o, R.data() + o, (int) std::min<size_t>(256, L.size() - o), p);
+                bool nowOn = std::fabs(e.meters.appliedDelayMs.load()) > 0.01; if (nowOn && !on) ep++; on = nowOn; act += nowOn; tot++; }
+            frac = (double) act / tot; return ep; };
+        SpatialEngine a; a.prepare(fs, 256); tsr_v102::SpatialEngine b; b.prepare(fs, 256); double fa = 0, fb = 0;
+        Params pa; pa.mode = MODE_MUSIC; tsr_v102::Params pb; pb.mode = tsr_v102::MODE_MUSIC;
+        int ea = episodes(a, pa, fa), eb = episodes(b, pb, fb);
+        check(ea <= 0.4 * eb && fa < 0.25, "T39 spaced pair: PHASE does not chase note-dependent delays",
+              fmt("1.0.3: %.0f corrections, %.0f%% of the time | 1.0.2: %.0f corrections, ", ea, 100 * fa, eb) + fmt("%.0f%% of the time", 100 * fb));
+    }
+    {   // T40: transient material (hi-hat bursts, 2 mics 9.5 samples apart): correlation normalised per lag (|r| <= 1), the
+        //       correction engages and HOLDS (1.0.2: a burst entering the shifted window gave r >> 1 at a bogus lag)
+        const int n = (int) (fs * 12); Buf L0((size_t) n, 0.f); Rng r; r.s ^= 77;
+        for (int b = 0; b < n; b += (int) (0.125 * fs)) { double g = (b / (int) (0.125 * fs)) % 4 == 0 ? 0.5 : 0.2;
+            for (int i = 0; i < (int) (0.06 * fs) && b + i < n; ++i) L0[(size_t) (b + i)] = (float) (g * r.g() * std::exp(-i / (0.012 * fs))); }
+        L0 = lowpassed(L0, fs, 18000); Buf R0 = sincDelay(L0, 9.5), L = L0, R = R0;
+        auto hold = [&](auto& e, auto p, double& maxConf, double& off) { Buf a = L, b = R; long bad = 0; maxConf = 0; off = 0;
+            for (size_t o = 0; o < a.size(); o += 256) { e.process(a.data() + o, b.data() + o, (int) std::min<size_t>(256, a.size() - o), p);
+                maxConf = std::max(maxConf, (double) e.meters.phaseConfidence.load());
+                if (o > 1.5 * fs) { double d = std::fabs(e.meters.appliedDelayMs.load() * fs / 1000 - 9.5); off = std::max(off, d); if (d > 0.05) ++bad; } }
+            return bad; };
+        SpatialEngine a; a.prepare(fs, 256); tsr_v102::SpatialEngine b; b.prepare(fs, 256);
+        Params pa = neutral(); pa.coherence = 1; tsr_v102::Params pb; pb.coherence = 1; pb.depth = 0; pb.width = 1; pb.motion = 0;
+        double ca, cb, oa, ob; long ba = hold(a, pa, ca, oa), bb = hold(b, pb, cb, ob);
+        check(ba == 0 && ca <= 1.0, "T40 hi-hat bursts, 2 mics: lag held, |r| <= 1",
+              fmt("1.0.3: blocks off-target %.0f, max conf %.3f | 1.0.2: blocks off-target %.0f, ", (double) ba, ca, (double) bb) + fmt("max conf %.1f", cb));
     }
     std::printf("\nRESULT: %d passed, %d failed\n", gPass, gFail);
     return gFail ? 1 : 0;

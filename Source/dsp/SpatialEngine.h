@@ -12,6 +12,12 @@
 //   FAIL-SAFE: out = b + s*(c-b); s in [0,1] chosen per block so that predicted mono loss and
 //              correlation stay inside MONO SAFETY limits (closed-form from second moments).
 //   MIX scales every move (parameter-domain mix, no dry/wet comb filtering).
+//
+// 1.0.3: PHASE fractional delay = 32-tap Kaiser windowed sinc (was 3rd-order Lagrange: -3.3 dB @16 kHz, -8.4 dB @20 kHz on
+//        the corrected channel at 48 kHz); latency 2 -> 15 samples. Filter design frequencies clamped below Nyquist
+//        (8 kHz sessions blew up). DEPTH shelf / send filter follow DEPTH smoothly (0.05 dB / 50 Hz coefficient steps
+//        made HF artefacts at -71 dB under automation). CPU: meters only while a meter view is open, 4-lane meter filters,
+//        cached early-reflection taps, sliced analysis jobs (no CPU spikes). Every optimisation is bit-exact vs 1.0.2.
 #pragma once
 #include <algorithm>
 #include <array>
@@ -25,9 +31,12 @@
 namespace tsr {
 
 constexpr double kPi = 3.14159265358979323846;
-constexpr int kBaseLatency = 2;      // samples, constant (lets the leading channel be delayed sub-sample)
+constexpr int kFirTaps = 32;                     // PHASE fractional delay: windowed-sinc taps (even)
+constexpr int kBaseLatency = kFirTaps / 2 - 1;   // 15 samples, constant: room for a centred 32-tap interpolator
+constexpr double kKaiserBeta = 7.0;              // window: <= 0.002 dB error to 18 kHz @44.1k and to 20 kHz @48k
 constexpr double kMaxLagMs = 1.0;    // max phase-alignment correction
 constexpr int kChunk = 256;          // internal processing chunk
+inline double belowNyquist(double fs, double f) { return std::min(f, 0.45 * fs); }   // 1.0.3: fs = 8 kHz made NaN/Inf
 
 enum Mode { MODE_PHASE = 0, MODE_DEPTH, MODE_MOTION, MODE_VOCAL, MODE_DRUMS, MODE_MUSIC };
 enum Monitor { MON_ORIGINAL = 0, MON_TSR, MON_DELTA };
@@ -107,7 +116,12 @@ struct Biquad {
         setNorm(1 - al, -2 * c, 1 + al, 1 + al, -2 * c, 1 - al);
     }
     void highshelf(double fs, double f, double gainDb) {
-        double A = std::pow(10.0, gainDb / 40.0), w = 2 * kPi * f / fs, c = std::cos(w), s = std::sin(w);
+        double w = 2 * kPi * f / fs;
+        highshelfCS(std::cos(w), std::sin(w), gainDb);
+    }
+    // same formula with cos/sin of the (fixed) corner precomputed: lets DEPTH redesign the shelf every sample while it moves
+    void highshelfCS(double c, double s, double gainDb) {
+        double A = std::pow(10.0, gainDb / 40.0);
         double al = s / 2 * std::sqrt(2.0), sa = 2 * std::sqrt(A) * al;
         setNorm(A * ((A + 1) + (A - 1) * c + sa), -2 * A * ((A - 1) + (A + 1) * c), A * ((A + 1) + (A - 1) * c - sa),
                 (A + 1) - (A - 1) * c + sa, 2 * ((A - 1) - (A + 1) * c), (A + 1) - (A - 1) * c - sa);
@@ -136,7 +150,10 @@ struct LR4HP {
 // LR4 identity: LP4 + HP4 = AP2 (2nd-order all-pass, same f, Q = 1/sqrt2) -> HP4 = AP2 - LP4 (6 biquads instead of 8).
 struct Split3 {
     LR4LP lp1, lp2; Biquad ap1, ap2;
-    void set(double fs, double f1, double f2) { lp1.set(fs, f1); ap1.allpass(fs, f1, 0.70710678); lp2.set(fs, f2); ap2.allpass(fs, f2, 0.70710678); }
+    void set(double fs, double f1, double f2) {
+        f1 = belowNyquist(fs, f1); f2 = belowNyquist(fs, f2);
+        lp1.set(fs, f1); ap1.allpass(fs, f1, 0.70710678); lp2.set(fs, f2); ap2.allpass(fs, f2, 0.70710678);
+    }
     inline void process(float x, float& l, float& m, float& h) {
         l = lp1.process(x);
         float r = ap1.process(x) - l;
@@ -145,6 +162,40 @@ struct Split3 {
     }
     void reset() { lp1.reset(); lp2.reset(); ap1.reset(); ap2.reset(); }
     void flush() { lp1.flush(); lp2.flush(); ap1.flush(); ap2.flush(); }
+};
+
+// 1.0.3: the four metering splits (in M, in S, out M, out S) share their coefficients -> one 4-lane filter bank.
+// Per lane the arithmetic is exactly Biquad::process / Split3::process (float in/out, double state): bit-identical meters,
+// but the compiler can run the lanes in SIMD registers.
+struct Biquad4 {
+    double b0 = 1, b1 = 0, b2 = 0, a1 = 0, a2 = 0, z1[4] = {0, 0, 0, 0}, z2[4] = {0, 0, 0, 0};
+    void from(const Biquad& q) { b0 = q.b0; b1 = q.b1; b2 = q.b2; a1 = q.a1; a2 = q.a2; }
+    inline void process(const float* x, float* out) {
+        for (int k = 0; k < 4; ++k) {
+            double y = b0 * x[k] + z1[k];
+            z1[k] = b1 * x[k] - a1 * y + z2[k];
+            z2[k] = b2 * x[k] - a2 * y;
+            out[k] = (float) y;
+        }
+    }
+    void reset() { for (int k = 0; k < 4; ++k) z1[k] = z2[k] = 0; }
+    void flush() { for (int k = 0; k < 4; ++k) { ftz(z1[k]); ftz(z2[k]); } }
+};
+struct Split3x4 {
+    Biquad4 lp1a, lp1b, ap1, lp2a, lp2b, ap2;
+    void set(double fs, double f1, double f2) {
+        Split3 s; s.set(fs, f1, f2);
+        lp1a.from(s.lp1.a); lp1b.from(s.lp1.b); ap1.from(s.ap1); lp2a.from(s.lp2.a); lp2b.from(s.lp2.b); ap2.from(s.ap2);
+    }
+    inline void process(const float* x, float* l, float* m, float* h) {
+        float t[4], u[4], r[4];
+        lp1a.process(x, t); lp1b.process(t, l);
+        ap1.process(x, u); for (int k = 0; k < 4; ++k) r[k] = u[k] - l[k];
+        lp2a.process(r, t); lp2b.process(t, m);
+        ap2.process(r, u); for (int k = 0; k < 4; ++k) h[k] = u[k] - m[k];
+    }
+    void reset() { lp1a.reset(); lp1b.reset(); ap1.reset(); lp2a.reset(); lp2b.reset(); ap2.reset(); }
+    void flush() { lp1a.flush(); lp1b.flush(); ap1.flush(); lp2a.flush(); lp2b.flush(); ap2.flush(); }
 };
 
 // Phase-coherent complementary split for the WIDTH / MOTION moves (1.0.2).
@@ -161,7 +212,7 @@ struct AP1 {
 };
 struct Split3C {
     AP1 a1, a2;
-    void set(double fs, double f1, double f2) { a1.set(fs, f1); a2.set(fs, f2); }
+    void set(double fs, double f1, double f2) { a1.set(fs, belowNyquist(fs, f1)); a2.set(fs, belowNyquist(fs, f2)); }
     inline void process(float x, float& l, float& m, float& h) {
         double lo = 0.5 * (x + a1.process(x)), r = x - lo;
         double mi = 0.5 * (r + a2.process(r));
@@ -196,6 +247,56 @@ struct DelayLine {
     inline float linear(double d) const {
         int i = (int) std::floor(d); float f = (float) (d - i);
         return at(i) * (1.f - f) + at(i + 1) * f;
+    }
+    inline float linearAt(int i, float f) const { return at(i) * (1.f - f) + at(i + 1) * f; }   // same arithmetic as linear()
+};
+
+// 1.0.3: fractional delay for ENGINE 1 (PHASE). Kaiser windowed sinc, kFirTaps taps centred on the wanted delay D:
+// flat magnitude and linear phase to 18 kHz @44.1k / 20 kHz @48k (3rd-order Lagrange lost 3.3 dB @16 kHz at half a sample).
+// Coefficients come from a 512-phase table (shared, built once) with linear interpolation between phases: 1.6e-6 max
+// coefficient error, < 0.0001 dB vs the exact design. Needs D >= kFirTaps/2 - 1 (= kBaseLatency). Integer delays are read
+// directly (bit-exact).
+struct FracTable {
+    static constexpr int P = 512;
+    float h[P + 1][kFirTaps];
+    FracTable() {
+        auto i0 = [] (double x) { double sum = 1, t = 1; for (int k = 1; k < 64; ++k) { t *= (x / (2.0 * k)) * (x / (2.0 * k)); sum += t; if (t < 1e-17 * sum) break; } return sum; };
+        const double norm = i0(kKaiserBeta);
+        for (int r = 0; r <= P; ++r) {
+            const double f = (double) r / P; double c[kFirTaps], sum = 0;
+            for (int k = 0; k < kFirTaps; ++k) {
+                const int m = k - (kFirTaps / 2 - 1);                 // tap delay = i + m, m = -15..16
+                const double t = m - f, u = t / (kFirTaps / 2);
+                const double sinc = std::fabs(t) < 1e-12 ? 1.0 : std::sin(kPi * t) / (kPi * t);
+                const double w = std::fabs(u) >= 1.0 ? 0.0 : i0(kKaiserBeta * std::sqrt(1.0 - u * u)) / norm;
+                c[k] = sinc * w; sum += c[k];
+            }
+            for (int k = 0; k < kFirTaps; ++k) h[r][k] = (float) (c[k] / sum);
+        }
+    }
+};
+inline const FracTable& fracTable() { static const FracTable t; return t; }   // built on first prepare(), never on the audio thread
+struct FracDelay {
+    const FracTable* tab = nullptr;
+    float h[kFirTaps] = {};
+    double cachedD = -1.0;
+    void init() { tab = &fracTable(); cachedD = -1.0; }
+    void reset() { cachedD = -1.0; }
+    void design(double D) {
+        const double f = D - std::floor(D), p = f * FracTable::P;
+        const int r = std::min(FracTable::P - 1, (int) p); const float a = (float) (p - r);
+        const float* h0 = tab->h[r]; const float* h1 = tab->h[r + 1];
+        for (int k = 0; k < kFirTaps; ++k) h[k] = h0[k] + a * (h1[k] - h0[k]);
+        cachedD = D;
+    }
+    inline float read(const DelayLine& dl, double D) {
+        const int i = (int) std::floor(D);
+        if (D - i < 1e-9) return dl.at(i);
+        if (std::fabs(D - cachedD) > 1e-7) design(D);
+        const int i0 = (int) std::floor(cachedD) - (kFirTaps / 2 - 1);
+        float acc = 0.f;
+        for (int k = 0; k < kFirTaps; ++k) acc += h[k] * dl.at(i0 + k);
+        return acc;
     }
 };
 
@@ -245,7 +346,7 @@ struct DepthAnalyzer {
         fs = sr; aFast = std::exp(-1.0 / (0.005 * sr)); aSlow = std::exp(-1.0 / (0.200 * sr));
         aStat = std::exp(-1.0 / (1.5 * sr));
         refractory = (long) (0.100 * sr); earlyLen = (long) (0.050 * sr); lateLen = (long) (0.250 * sr);
-        hp.highpass(sr, 4000, 0.707); reset();
+        hp.highpass(sr, belowNyquist(sr, 4000), 0.707); reset();
     }
     void reset() { fast = slow = 0; early = late = 1e-9; hf = 0; tot = 1e-9; sinceOnset = 1 << 30; hp.reset(); }
     void flush() { ftz(fast); ftz(slow); ftz(hf); hp.flush(); }
@@ -293,7 +394,10 @@ struct MotionTrajectory {
         double dt = 1.0 / fs;
         double beat = 60.0 / std::max(40.0, std::min(240.0, bpm));
         ph1 += dt / (8 * beat); ph2 += dt / (3 * beat); ph3 += dt / (12 * beat);
-        ph1 -= std::floor(ph1); ph2 -= std::floor(ph2); ph3 -= std::floor(ph3);
+        // wrap (same result as ph -= floor(ph) for ph >= 0; floor() only when a wrap is due)
+        if (ph1 >= 1.0) ph1 -= std::floor(ph1);
+        if (ph2 >= 1.0) ph2 -= std::floor(ph2);
+        if (ph3 >= 1.0) ph3 -= std::floor(ph3);
         double pmax = 0.35 * motion;
         double target = pmax * (0.7 * std::sin(2 * kPi * ph1) + 0.3 * std::sin(2 * kPi * ph2 + 1.3));
         // musical smoothing: critically damped 2-pole (tau 150 ms)
@@ -335,7 +439,7 @@ struct DepthReverb {
     float lastSendFc = -1;
     void init(double sr) {
         fs = sr;
-        sendHp.set(sr, 200.0);
+        sendHp.set(sr, belowNyquist(sr, 200.0));
         send.init((int) (0.260 * sr));
         const double lens[4] = {29.7, 37.1, 41.1, 43.7};
         for (int i = 0; i < 4; ++i) { fdnLen[i] = (int) (lens[i] * 0.001 * sr); fdn[i].init(fdnLen[i] + 4); }
@@ -349,24 +453,40 @@ struct DepthReverb {
         for (auto& z : fdnLp) z = 0;
         sendLp.reset(); sendHp.reset(); lastSendFc = -1;
         cDepth = -1.f; cRt = -1.f;   // invalidate fs-dependent caches
+        cPd = cEr = cCl = -1.f;
     }
     void flush() { for (auto& z : fdnLp) ftz(z); sendLp.flush(); sendHp.flush(); }
     // returns early (eL,eR) and late (lL,lR)
     float cDepth = -1.f, cRt = -1.f; double cDampA = 0, cG[4] = {0, 0, 0, 0};   // exact-input caches (bit-identical results)
-    inline void process(float m, float depth, float centerLock, float predelayMs, float erScale, float rt60,
-                        float& eL, float& eR, float& lL, float& lR) {
-        float fc = 12000.f - 9000.f * depth;
-        if (std::fabs(fc - lastSendFc) > 50.f) { sendLp.lowpass(fs, std::min<double>(fc, 0.45 * fs), 0.707); lastSendFc = fc; }
-        send.push(sendLp.process(sendHp.process(m)));
+    // 1.0.3: tap positions/gains cached on their exact inputs (pre-delay, ER scale, CENTER LOCK): same arithmetic as 1.0.2,
+    // recomputed only while those inputs move (was 16 floor() + 40 multiplies per sample, ~25 % of the engine's CPU)
+    float cPd = -1.f, cEr = -1.f, cCl = -1.f;
+    int tapIL[kTaps] = {}, tapIR[kTaps] = {}; float tapFL[kTaps] = {}, tapFR[kTaps] = {}, tapGL[kTaps] = {}, tapGR[kTaps] = {};
+    void updateTaps(float centerLock, float predelayMs, float erScale) {
+        cPd = predelayMs; cEr = erScale; cCl = centerLock;
         double pd = predelayMs * 0.001 * fs;
-        double accL = 0, accR = 0;
         for (int i = 0; i < kTaps; ++i) {
             double dL = pd + tL[i] * erScale * 0.001 * fs;
             double dRa = pd + tR[i] * erScale * 0.001 * fs;
             double dR = dRa + (dL - dRa) * centerLock;               // CENTER LOCK: mirror pattern -> centred
             float gR = sR[i] + (sL[i] - sR[i]) * centerLock;
-            accL += gTap[i] * sL[i] * send.linear(std::max(1.0, dL));
-            accR += gTap[i] * gR * send.linear(std::max(1.0, dR));
+            dL = std::max(1.0, dL); dR = std::max(1.0, dR);
+            tapIL[i] = (int) std::floor(dL); tapFL[i] = (float) (dL - tapIL[i]);
+            tapIR[i] = (int) std::floor(dR); tapFR[i] = (float) (dR - tapIR[i]);
+            tapGL[i] = gTap[i] * sL[i]; tapGR[i] = gTap[i] * gR;
+        }
+    }
+    inline void process(float m, float depth, float centerLock, float predelayMs, float erScale, float rt60,
+                        float& eL, float& eR, float& lL, float& lR) {
+        float fc = 12000.f - 9000.f * depth;
+        // 1.0.3: follows DEPTH exactly (was redesigned in 50 Hz steps -> coefficient jumps under automation)
+        if (fc != lastSendFc) { sendLp.lowpass(fs, std::min<double>(fc, 0.45 * fs), 0.707); lastSendFc = fc; }
+        send.push(sendLp.process(sendHp.process(m)));
+        if (predelayMs != cPd || erScale != cEr || centerLock != cCl) updateTaps(centerLock, predelayMs, erScale);
+        double accL = 0, accR = 0;
+        for (int i = 0; i < kTaps; ++i) {
+            accL += tapGL[i] * send.linearAt(tapIL[i], tapFL[i]);
+            accR += tapGR[i] * send.linearAt(tapIR[i], tapFR[i]);
         }
         eL = (float) accL; eR = (float) accR;
         // 4-line FDN, Hadamard mixing, HF damping in loop
@@ -400,30 +520,49 @@ public:
     void prepare(double sampleRate, int /*maxBlock*/) {
         fs = sampleRate;
         maxLag = (int) std::ceil(kMaxLagMs * 0.001 * fs);
-        dlL.init(maxLag + kBaseLatency + 8); dlR.init(maxLag + kBaseLatency + 8);
+        dlL.init(maxLag + kBaseLatency + kFirTaps / 2 + 8); dlR.init(maxLag + kBaseLatency + kFirTaps / 2 + 8);
         dryL.init(kBaseLatency + 4); dryR.init(kBaseLatency + 4);
+        fdL.init(); fdR.init(); initPeakWindow();
         win = 1; while (win < (int) (0.085 * fs)) win <<= 1;
         hop = win / 2;
-        ringHpL.assign((size_t) win, 0.f); ringHpR.assign((size_t) win, 0.f);
-        ringLoL.assign((size_t) win, 0.f); ringLoR.assign((size_t) win, 0.f);
-        tmpA.assign((size_t) win, 0.f); tmpB.assign((size_t) win, 0.f);
-        tmpC.assign((size_t) win, 0.f); tmpD.assign((size_t) win, 0.f);
+        // 1.0.3: analysis rings are written twice (period 2*win, buffer 4*win): the last win samples are always contiguous
+        // and stay untouched while the job runs (it ends within applyAt < win samples) -> no snapshot copy (was a 4*win memcpy
+        // plus two energy loops inside one block)
+        ringHpL.assign((size_t) (4 * win), 0.f); ringHpR.assign((size_t) (4 * win), 0.f);
+        ringLoL.assign((size_t) (4 * win), 0.f); ringLoR.assign((size_t) (4 * win), 0.f);
+        rmask = 2 * win - 1;
         applyAt = hop / 2;
-        {   const double total = (double) (2 * maxLag + 1) * (win - 2 * maxLag) + (kAp + 1) * 4.0 * win;
+        {   const double total = (double) kPrepUnits * (win - 2 * maxLag) + (double) (2 * maxLag + 1) * (win - 2 * maxLag) + (kAp + 1) * (double) kCandUnits * win;
             jobBudget = (long) std::ceil(total / std::max(1, applyAt - kChunk)) + 1; }
         frameDecay = std::exp(-(double) kFrame / (0.100 * fs));
-        corrBuf.assign((size_t) (2 * maxLag + 1), 0.0);
+        corrBuf.assign((size_t) (2 * maxLag + 1), 0.0); corrAvg.assign((size_t) (2 * maxLag + 1), 0.0); eyLag.assign((size_t) (2 * maxLag + 1), 0.0);
+        avgA = std::exp(-(double) hop / (4.0 * fs));   // tau 4 s
         aMeter = std::exp(-1.0 / (0.300 * fs));
-        hpAL.highpass(fs, 200, 0.707); hpAR.highpass(fs, 200, 0.707);
-        lpAL.lowpass(fs, 250, 0.707); lpAR.lowpass(fs, 250, 0.707);
+        hpAL.highpass(fs, belowNyquist(fs, 200), 0.707); hpAR.highpass(fs, belowNyquist(fs, 200), 0.707);
+        lpAL.lowpass(fs, belowNyquist(fs, 250), 0.707); lpAR.lowpass(fs, belowNyquist(fs, 250), 0.707);
         // moves: complementary split, 400 Hz (1st-order skirt: bass kept mono-safe) and 4 kHz (CENTER LOCK protects the lead below it)
         splitM.set(fs, 400, 4000); splitS.set(fs, 400, 4000);
-        anInM.set(fs, 150, 2500); anInS.set(fs, 150, 2500); anOutM.set(fs, 150, 2500); anOutS.set(fs, 150, 2500);
+        an.set(fs, 150, 2500);
+        for (int j = 0; j < kAp; ++j) { Biquad q; q.allpass(fs, apFreqs[j], 0.6); apB0[j] = q.b0; apB1[j] = q.b1; apB2[j] = q.b2; apA1[j] = q.a1; apA2[j] = q.a2; }
         rev.init(fs); traj.init(fs);
         daIn.init(fs); daOut.init(fs);
         shelfFs = -1;
+        { const double w = 2 * kPi * belowNyquist(fs, 4500) / fs; shelfCos = std::cos(w); shelfSin = std::sin(w); }
+        // per-sample smoothing constants (1.0.3: computed once here instead of once per chunk; same expressions)
+        aP = 1.f - std::exp(-1.f / (0.030f * (float) fs));
+        aDelay = 1.f - std::exp(-1.f / (0.150f * (float) fs));
+        aEnv = std::exp(-1.0 / (0.300 * fs));
+        aComp = std::exp(-1.0 / (0.400 * fs));
+        aCompG = 1.f - std::exp(-1.f / (0.050f * (float) fs));
+        gaFast = 1.f - std::exp(-1.f / (0.020f * (float) fs)); gaSlow = 1.f - std::exp(-1.f / (0.300f * (float) fs));
+        fadeStep = 1.0 / (0.080 * fs); monStep = 1.0 / (0.020 * fs);
         reset();
     }
+
+    // 1.0.3: the meters (in/out band correlation, balance, spread, depth, integrity) only feed the display. The plugin turns
+    // them off while no editor is open (audio output is identical either way). Default on (tests, web page).
+    void setMetersActive(bool on) { metersOn.store(on, std::memory_order_relaxed); }
+    bool metersActive() const { return metersOn.load(std::memory_order_relaxed); }
 
     void reset() {
         dlL.clear(); dlR.clear(); dryL.clear(); dryR.clear();
@@ -431,14 +570,18 @@ public:
         std::fill(ringLoL.begin(), ringLoL.end(), 0.f); std::fill(ringLoR.begin(), ringLoR.end(), 0.f);
         ringPos = 0; hopCount = 0; filled = 0;
         hpAL.reset(); hpAR.reset(); lpAL.reset(); lpAR.reset();
-        splitM.reset(); splitS.reset(); anInM.reset(); anInS.reset(); anOutM.reset(); anOutS.reset();
+        splitM.reset(); splitS.reset(); an.reset();
         rev.reset(); traj.reset(); daIn.reset(); daOut.reset();
         apCur.reset(); apNew.reset(); apCurIdx = -1; apNewIdx = -1; apFade = 1.f;
         shL.reset(); shR.reset();
+        fdL.reset(); fdR.reset();
+        cwI = 0; cWetDep = -1.f; cWetLvl = 0.f;
         lagTarget = 0; delaySm = 0; lastLag = 0; lastConf = 0;
+        std::fill(corrAvg.begin(), corrAvg.end(), 0.0); avgPow = 1;
         for (auto& m : mom) m = 0;
         sPrev = 1.f; guardGain = 1.f; wetEnv = dirEnv = 0;
-        sStart = sEnd = 1.f; framePos = 0; for (auto& f : frameAcc) f = 0;
+        sStart = sEnd = 1.f; framePos = kFrame - kCtlDelay; for (auto& f : frameAcc) f = 0;   // frame grid on the control clock
+        ctlCount = 0;
         jobStage = -1; jobAge = 0; jobAcc = 0;
         lagPos = 0; lagN = 0; incons = 0; apWantPrev = -2; apWantCount = 0;
         monG[0] = 0.f; monG[1] = 1.f; monG[2] = 0.f; bypG = 0.f;
@@ -457,8 +600,8 @@ public:
 
     void flushDenormals() {   // once per chunk; recursive states that can decay towards 0
         hpAL.flush(); hpAR.flush(); lpAL.flush(); lpAR.flush();
-        splitM.flush(); splitS.flush(); anInM.flush(); anInS.flush(); anOutM.flush(); anOutS.flush();
-        apCur.flush(); apNew.flush(); shL.flush(); shR.flush();
+        splitM.flush(); splitS.flush(); an.flush();
+        apCur.flush(); apNew.flush(); shL.flush(); shR.flush();   // (not cwZ1/cwZ2: the analysis must not depend on chunking)
         rev.flush(); traj.flush(); daIn.flush(); daOut.flush();
         for (auto& b : bIn) b.flush();
         for (auto& b : bOut) b.flush();
@@ -511,28 +654,49 @@ private:
     DelayLine dlL, dlR, dryL, dryR;
     // phase analysis
     int win = 4096, hop = 2048, ringPos = 0, hopCount = 0, filled = 0;
-    std::vector<float> ringHpL, ringHpR, ringLoL, ringLoR, tmpA, tmpB, tmpC, tmpD;
+    std::vector<float> ringHpL, ringHpR, ringLoL, ringLoR;
+    const float* tmpA = nullptr; const float* tmpB = nullptr; const float* tmpC = nullptr; const float* tmpD = nullptr;   // job window
+    int rmask = 8191, prepT = 0; double prepEx = 0, prepEy = 0, prepE0 = 0;
     // amortised analysis job (snapshot at hop, fixed MAC budget per sample, commit at fixed sample offset)
     int jobStage = -1, jobLag = 0, jobI = 0, jobApIdx = -1, jobAge = 0, applyAt = 1024, jobBest = 0;
-    long jobBudget = 1000; double jobAcc = 0, jobNorm = 1, jobBestV = -2; bool jobSilent = false;
+    long jobBudget = 1000; double jobAcc = 0, jobNorm = 1, jobBestV = -2, ex0 = 0; bool jobSilent = false;
+    std::vector<double> eyLag;   // energy of the shifted R analysis window per lag (1.0.3)
     double apC[8] = {0};
     static constexpr int kCons = 10, kRelease = 6;
     double lagHist[kCons] = {}; int lagPos = 0, lagN = 0, incons = 0, apWantPrev = -2, apWantCount = 0;
     // fail-safe on a fixed 64-sample grid (host block size independent)
     static constexpr int kFrame = 64; double frameAcc[10] = {0}; int framePos = 0; float sStart = 1.f, sEnd = 1.f; double frameDecay = 0.99;
     float monG[3] = {0.f, 1.f, 0.f}; float bypG = 0.f;
-    std::vector<double> corrBuf;
+    std::vector<double> corrBuf, corrAvg; double avgA = 0.98, avgPow = 1;   // corrAvg: long-term correlation (1.0.3)
     Biquad hpAL, hpAR, lpAL, lpAR;
     double lagTarget = 0, delaySm = 0, lastLag = 0, lastConf = 0;
     // all-pass
     static constexpr int kAp = 5;
+    // budget weight of one all-pass-candidate sample relative to one float MAC of the lag search (scheduling only: results
+    // never depend on it). 1.0.2 counted 4 -> the candidate pass was squeezed into ~2 blocks (worst block 4x the median);
+    // 16 matches its real cost (measured sweep 4/8/16/24/32: worst/median 3.1 / 2.2 / 1.7 / 1.6 / 1.7 at 96 kHz)
+    static constexpr int kCandUnits = 16;
+    static constexpr int kPrepUnits = 8;   // budget weight of one window sample of the energy pass (3 dependent double MACs;
+                                           // measured sweep 3/8/12/16: worst/median at 96 kHz/32 2.64 / 2.31 / 2.34 / 2.35)
     const double apFreqs[kAp] = {45, 65, 90, 125, 175};
     Biquad apCur, apNew; int apCurIdx = -1, apNewIdx = -1; float apFade = 1.f;
     // spatial
-    Split3C splitM, splitS; Split3 anInM, anInS, anOutM, anOutS;
+    Split3C splitM, splitS; Split3x4 an;   // an: metering split, lanes = in M, in S, out M, out S
     MotionTrajectory traj;
     DepthReverb rev;
-    Biquad shL, shR; float shelfFs = -1, shelfDb = 99;
+    Biquad shL, shR; float shelfFs = -1, shelfDb = 99; double shelfCos = 1, shelfSin = 0;
+    FracDelay fdL, fdR;
+    std::atomic<bool> metersOn { true };
+    float cWetDep = -1.f, cWetLvl = 0.f;   // exact-input cache of dep * dbToLin(-24 + 18 dep)
+    bool metersWereOn = true;
+    static constexpr int kLead = 2;                          // analysis/control look-ahead over the processed audio (1.0.2 value)
+    static constexpr int kCtlDelay = kBaseLatency - kLead;   // control clock starts this many samples after the audio clock
+    int ctlCount = 0;
+    // incremental all-pass correlation (1.0.3: was one 4*win-sample burst inside a single block -> CPU spikes)
+    int cwI = 0; double cwSxy[kAp + 1] = {}, cwSyy[kAp + 1] = {}, cwSxx = 0, cwZ1[kAp] = {}, cwZ2[kAp] = {};
+    double apB0[kAp] = {}, apB1[kAp] = {}, apB2[kAp] = {}, apA1[kAp] = {}, apA2[kAp] = {};   // candidate all-pass coefficients
+    // per-sample constants (prepare)
+    float aP = 0, aDelay = 0, aCompG = 0, gaFast = 0, gaSlow = 0; double aEnv = 0, aComp = 0, fadeStep = 0, monStep = 0;
     float guardGain = 1.f; double wetEnv = 0, dirEnv = 0;
     // fail-safe moments: bLbL bRbR bLbR dLdL dRdR dLdR bLdL bRdR bLdR dLbR
     double mom[10] = {0};
@@ -553,40 +717,51 @@ private:
 
     inline float sAt(float target, float cur, float a) { return cur + a * (target - cur); }
 
-    double corrWith(int idx) const {
-        Biquad ap; if (idx >= 0) ap.allpass(fs, apFreqs[idx], 0.6);
-        double sxy = 0, sxx = 0, syy = 0; int start = win / 8;
-        for (int i = 0; i < win; ++i) {
-            double y = idx >= 0 ? ap.process(tmpD[(size_t) i]) : tmpD[(size_t) i];
-            if (i < start) continue;
-            double x = tmpC[(size_t) i]; sxy += x * y; sxx += x * x; syy += y * y;
-        }
-        return (sxx < 1e-9 || syy < 1e-9) ? 1.0 : sxy / std::sqrt(sxx * syy);
+    void startJob() {
+        // window = the last win samples, contiguous in the double-written ring
+        const size_t s0 = (size_t) ((ringPos - win) & rmask);
+        tmpA = ringHpL.data() + s0; tmpB = ringHpR.data() + s0; tmpC = ringLoL.data() + s0; tmpD = ringLoR.data() + s0;
+        prepT = 0; prepEx = prepEy = prepE0 = 0;
+        jobLag = -maxLag; jobI = maxLag; jobAcc = 0; jobBest = 0; jobBestV = -2; jobApIdx = -1; jobAge = 0;
+        jobStage = 3;   // energies first (sliced), then the lag search
     }
 
-    void startJob() {
-        for (int i = 0; i < win; ++i) {
-            int j = (ringPos + i) % win;
-            tmpA[(size_t) i] = ringHpL[(size_t) j]; tmpB[(size_t) i] = ringHpR[(size_t) j];
-            tmpC[(size_t) i] = ringLoL[(size_t) j]; tmpD[(size_t) i] = ringLoR[(size_t) j];
-        }
-        double ex = 0, ey = 0;
-        for (int i = maxLag; i < win - maxLag; ++i) { ex += (double) tmpA[(size_t) i] * tmpA[(size_t) i]; ey += (double) tmpB[(size_t) i] * tmpB[(size_t) i]; }
-        jobSilent = (ex < 1e-7 || ey < 1e-7);
+    // stage 3: window energies, same sums and order as 1.0.2's startJob (ex, ey over [maxLag, win - maxLag)) plus the energy of
+    // the shifted R window for the most negative lag; then the per-lag energies by a sliding sum
+    void finishPrep() {
+        const double ex = prepEx, ey = prepEy;
+        jobSilent = (ex < 1e-7 || ey < 1e-7); ex0 = ex;
         jobNorm = std::sqrt(ex * ey);
-        jobLag = -maxLag; jobI = maxLag; jobAcc = 0; jobBest = 0; jobBestV = -2; jobApIdx = -1; jobAge = 0;
+        // 1.0.3: energy of the SHIFTED R window for every lag, so that every correlation value is a true normalised correlation
+        // (|r| <= 1). 1.0.2 divided all lags by the unshifted energy: a hi-hat hit entering the shifted window gave r = 152 at a
+        // bogus lag (measured on a 2-mic hi-hat), which broke the lag history.
+        const int end = win - maxLag; double e = prepE0;
+        for (int k = -maxLag; k <= maxLag; ++k) {
+            eyLag[(size_t) (k + maxLag)] = std::max(0.0, e);
+            if (k < maxLag) { const double add = tmpB[(size_t) (end + k)], rem = tmpB[(size_t) (maxLag + k)]; e += add * add - rem * rem; }
+        }
         jobStage = jobSilent ? 2 : 0;
     }
 
     void jobWork(long units) {
         std::vector<double>& r = corrBuf;
         const int end = win - maxLag;
-        while (units > 0 && (jobStage == 0 || jobStage == 1)) {
-            if (jobStage == 0) {
+        while (units > 0 && (jobStage == 0 || jobStage == 1 || jobStage == 3)) {
+            if (jobStage == 3) {
+                const int len = win - 2 * maxLag;
+                const int stop = (int) std::min<long>((long) len, (long) prepT + std::max<long>(1L, units / kPrepUnits));
+                double ex = prepEx, ey = prepEy, e0 = prepE0;
+                for (int t = prepT; t < stop; ++t) {
+                    const double a = tmpA[(size_t) (maxLag + t)], b = tmpB[(size_t) (maxLag + t)], c = tmpB[(size_t) t];
+                    ex += a * a; ey += b * b; e0 += c * c;
+                }
+                prepEx = ex; prepEy = ey; prepE0 = e0; units -= (long) kPrepUnits * (stop - prepT); prepT = stop;
+                if (prepT >= len) finishPrep();
+            } else if (jobStage == 0) {
                 // fixed 64-sample blocks, 8 independent float lanes (SIMD-friendly); block sums added in double, in order:
                 // the result does not depend on how the host splits the work (buffer-size independent)
-                const float* pa = tmpA.data();
-                const float* pb = tmpB.data() + maxLag + jobLag;   // pb[i - maxLag] == tmpB[i + jobLag]
+                const float* pa = tmpA;
+                const float* pb = tmpB + maxLag + jobLag;   // pb[i - maxLag] == tmpB[i + jobLag]
                 double acc = jobAcc;
                 while (units > 0 && jobI < end) {
                     const int n = std::min(64, end - jobI);
@@ -602,18 +777,80 @@ private:
                 }
                 jobAcc = acc;
                 if (jobI >= end) {
-                    double v = jobAcc / jobNorm;
+                    const double den = ex0 * eyLag[(size_t) (jobLag + maxLag)];
+                    double v = den > 1e-14 ? jobAcc / std::sqrt(den) : 0.0;
+                    v = std::max(-1.0, std::min(1.0, v));
                     r[(size_t) (jobLag + maxLag)] = v;
                     if (v > jobBestV) { jobBestV = v; jobBest = jobLag; }
                     jobAcc = 0; jobI = maxLag;
                     if (++jobLag > maxLag) { jobStage = 1; jobApIdx = -1; }
                 }
             } else {
-                apC[jobApIdx + 1] = corrWith(jobApIdx);
-                units -= 4L * win;
-                if (++jobApIdx >= kAp) jobStage = 2;
+                // 1.0.3: the six low-band correlations (no all-pass + 5 all-pass candidates) in ONE pass over the window, in
+                // slices that respect the budget (1.0.2 ran each candidate as one 4*win-sample burst -> CPU spikes).
+                // Per candidate the arithmetic is exactly 1.0.2's corrWith(): bit-identical results. Same budget (4 units per
+                // sample per candidate).
+                constexpr int K = kAp + 1;
+                if (cwI == 0) { for (int j = 0; j < kAp; ++j) cwZ1[j] = cwZ2[j] = 0; for (int j = 0; j < K; ++j) cwSxy[j] = cwSyy[j] = 0; cwSxx = 0; }
+                const int start = win / 8;
+                const int stop = (int) std::min<long>((long) win, (long) cwI + std::max<long>(1L, units / ((long) kCandUnits * K)));
+                double sxy[K], syy[K], z1[kAp], z2[kAp], sxx = cwSxx;
+                for (int j = 0; j < K; ++j) { sxy[j] = cwSxy[j]; syy[j] = cwSyy[j]; }
+                for (int j = 0; j < kAp; ++j) { z1[j] = cwZ1[j]; z2[j] = cwZ2[j]; }
+                for (int i = cwI; i < stop; ++i) {
+                    const float dIn = tmpD[(size_t) i];
+                    float y[K]; y[0] = dIn;
+                    for (int j = 0; j < kAp; ++j) {
+                        const double yy = apB0[j] * dIn + z1[j];
+                        z1[j] = apB1[j] * dIn - apA1[j] * yy + z2[j];
+                        z2[j] = apB2[j] * dIn - apA2[j] * yy;
+                        y[j + 1] = (float) yy;
+                    }
+                    if (i < start) continue;
+                    const double x = tmpC[(size_t) i]; sxx += x * x;
+                    for (int j = 0; j < K; ++j) { const double yj = y[j]; sxy[j] += x * yj; syy[j] += yj * yj; }
+                }
+                for (int j = 0; j < K; ++j) { cwSxy[j] = sxy[j]; cwSyy[j] = syy[j]; }
+                for (int j = 0; j < kAp; ++j) { cwZ1[j] = z1[j]; cwZ2[j] = z2[j]; }
+                cwSxx = sxx;
+                units -= (long) kCandUnits * K * (stop - cwI);
+                cwI = stop;
+                if (cwI >= win) {
+                    for (int j = 0; j < K; ++j) apC[j] = (sxx < 1e-9 || syy[j] < 1e-9) ? 1.0 : sxy[j] / std::sqrt(sxx * syy[j]);
+                    cwI = 0; jobApIdx = kAp; jobStage = 2;
+                }
             }
         }
+    }
+
+    static constexpr int kPkHalf = 8;          // correlation points used on each side of the peak
+    static constexpr int kPkWin = 1024;        // Kaiser (beta 5) table over v^2, v = distance / (kPkHalf + 1)
+    double pkWin[kPkWin + 2] = {};
+    void initPeakWindow() {
+        auto i0 = [] (double x) { double s = 1, q = 1; for (int k = 1; k < 40; ++k) { q *= (x / (2.0 * k)) * (x / (2.0 * k)); s += q; if (q < 1e-17 * s) break; } return s; };
+        const double beta = 5.0, n0 = i0(beta);
+        for (int k = 0; k <= kPkWin + 1; ++k) { const double v2 = std::min(1.0, (double) k / kPkWin); pkWin[k] = i0(beta * std::sqrt(1.0 - v2)) / n0; }
+    }
+    double corrAt(int best, double t) const {  // band-limited value of the normalised correlation at lag best + t
+        const double sp = std::sin(kPi * t), inv = 1.0 / ((kPkHalf + 1.0) * (kPkHalf + 1.0));
+        double acc = 0;
+        for (int k = -kPkHalf; k <= kPkHalf; ++k) {
+            const double u = t - k;
+            const double sinc = std::fabs(u) < 1e-12 ? 1.0 : ((k & 1) ? -sp : sp) / (kPi * u);
+            const double x = u * u * inv * kPkWin; const int j = (int) x; const double fr = x - j;
+            const double w = j >= kPkWin ? 0.0 : pkWin[j] + (pkWin[j + 1] - pkWin[j]) * fr;
+            acc += corrBuf[(size_t) (best + k + maxLag)] * sinc * w;
+        }
+        return acc;
+    }
+    double sincPeak(int best) const {          // golden-section search of the maximum in [-0.6, 0.6] (precision ~1e-6 sample)
+        const double g = 0.6180339887498949;
+        double lo = -0.6, hi = 0.6, c = hi - g * (hi - lo), d = lo + g * (hi - lo), fc = corrAt(best, c), fd = corrAt(best, d);
+        for (int it = 0; it < 28; ++it) {
+            if (fc > fd) { hi = d; d = c; fd = fc; c = hi - g * (hi - lo); fc = corrAt(best, c); }
+            else { lo = c; c = d; fc = fd; d = lo + g * (hi - lo); fd = corrAt(best, d); }
+        }
+        return std::max(-0.5, std::min(0.5, 0.5 * (lo + hi)));
     }
 
     void commitJob(float coherenceEff) {
@@ -629,12 +866,30 @@ private:
             double den = ym - 2 * y0 + yp;
             if (std::fabs(den) > 1e-12) frac = std::max(-0.5, std::min(0.5, 0.5 * (ym - yp) / den));
         }
+        // 1.0.3: sub-sample peak by band-limited (Kaiser-windowed sinc) interpolation of the correlation; the parabola is biased
+        // on sharp peaks (measured worst error 0.115 samples -> 0.036 on white noise, 0.086 -> 0.027 on pink noise)
+        if (best - kPkHalf >= -maxLag && best + kPkHalf <= maxLag) frac = sincPeak(best);
         double lag = best + frac;
         lastConf = std::max(0.0, bestV);
         // A real mic/time offset is STABLE over time; spurious peaks on wide synths/mixes wander (measured on real stems:
         // true offset spread 0.2 samples, synth pads/mixes 10-22 samples). Apply a lag only if the last kCons estimates
         // agree within 3 samples; persistent disagreement releases the correction to 0.
-        const bool cand = bestV > 0.3 && (bestV - r0) > 0.05 && std::abs(best) < maxLag;
+        // 1.0.3: a correction also needs LONG-TERM evidence. The normalised correlation is averaged over the hops (bias-corrected
+        // EMA, tau 4 s) and its peak must agree with this estimate within 3 samples. A real mic/time offset passes at once (from
+        // a cold start the average equals the estimate); note-dependent offsets of a spaced-pair recording do not. Measured on the
+        // PIANO stem at defaults: 11 brief corrections of up to 0.42 ms in 3 min (audible phasing) -> 0. Release timing unchanged;
+        // a NEW offset after other material takes ~3 s instead of ~0.8 s to engage (from a cold start: unchanged).
+        avgPow *= avgA;
+        const double nrm = 1.0 / (1.0 - avgPow);
+        int bestA = 0; double bestVA = -2;
+        for (int k = -maxLag; k <= maxLag; ++k) {
+            const size_t j = (size_t) (k + maxLag);
+            corrAvg[j] = avgA * corrAvg[j] + (1 - avgA) * corrBuf[j];
+            const double h = corrAvg[j] * nrm; if (h > bestVA) { bestVA = h; bestA = k; }
+        }
+        const double r0A = corrAvg[(size_t) maxLag] * nrm;
+        const bool longTerm = bestVA > 0.3 && (bestVA - r0A) > 0.05 && std::abs(bestA - best) <= 3;
+        const bool cand = bestV > 0.3 && (bestV - r0) > 0.05 && std::abs(best) < maxLag && longTerm;
         const bool aligned = bestV > 0.3 && std::fabs(lag) < 0.5;
         lagHist[lagPos] = cand ? lag : 1e9; lagPos = (lagPos + 1) % kCons; lagN = std::min(lagN + 1, kCons);
         bool consistent = false; double mean = 0;
@@ -675,14 +930,7 @@ private:
         const float tWid = 1.f + (std::max(0.f, std::min(2.f, P.width)) - 1.f) * mix, tMot = clamp01(P.motion) * mix;
         const float tCl = clamp01(P.centerLock), tDg = clamp01(P.depthGuard);
         if (!smInit) { sm = {tCoh, tDep, tEl, tWid, tMot, tCl, tDg}; smInit = true; }
-        const float aP = 1.f - std::exp(-1.f / (0.030f * (float) fs));
-        const float aDelay = 1.f - std::exp(-1.f / (0.150f * (float) fs));
-        const double aEnv = std::exp(-1.0 / (0.300 * fs));
-        const double aComp = std::exp(-1.0 / (0.400 * fs));
-        const float aCompG = 1.f - std::exp(-1.f / (0.050f * (float) fs));
-        const float gaFast = 1.f - std::exp(-1.f / (0.020f * (float) fs)), gaSlow = 1.f - std::exp(-1.f / (0.300f * (float) fs));
-        const double fadeStep = 1.0 / (0.080 * fs), monStep = 1.0 / (0.020 * fs);
-        if (jobStage == 0 || jobStage == 1) jobWork(jobBudget * n);
+        if (jobStage == 0 || jobStage == 1 || jobStage == 3) jobWork(jobBudget * n);
 
         for (int i = 0; i < n; ++i) {
             float xl = L[i], xr = R[i];
@@ -691,12 +939,19 @@ private:
             inL[i] = xl; inR[i] = xr;
             dryL.push(xl); dryR.push(xr);
             ddL[i] = dryL.at(kBaseLatency); ddR[i] = dryR.at(kBaseLatency);
-            // analysis rings
-            ringHpL[(size_t) ringPos] = hpAL.process(xl); ringHpR[(size_t) ringPos] = hpAR.process(xr);
-            ringLoL[(size_t) ringPos] = lpAL.process(xl); ringLoR[(size_t) ringPos] = lpAR.process(xr);
-            ringPos = (ringPos + 1) % win; if (filled < win) ++filled;
-            if (jobStage >= 0 && ++jobAge >= applyAt) commitJob(sm.coh);
-            if (++hopCount >= hop) { hopCount = 0; if (filled >= win) startJob(); }
+            // control clock (1.0.3): analysis, fail-safe frames and motion run kLead samples ahead of the processed audio, exactly
+            // as in 1.0.2 -> the longer latency does not move any decision relative to the audio it acts on
+            const bool ctl = ctlCount >= kCtlDelay; if (!ctl) ++ctlCount;
+            if (ctl) {
+                const float ax = dryL.at(kCtlDelay), ay = dryR.at(kCtlDelay);
+                const float hl = hpAL.process(ax), hr = hpAR.process(ay), ll = lpAL.process(ax), lr = lpAR.process(ay);
+                const size_t q0 = (size_t) ringPos, q1 = q0 + (size_t) (2 * win);
+                ringHpL[q0] = hl; ringHpR[q0] = hr; ringLoL[q0] = ll; ringLoR[q0] = lr;
+                ringHpL[q1] = hl; ringHpR[q1] = hr; ringLoL[q1] = ll; ringLoR[q1] = lr;
+                ringPos = (ringPos + 1) & rmask; if (filled < win) ++filled;
+                if (jobStage >= 0 && ++jobAge >= applyAt) commitJob(sm.coh);
+                if (++hopCount >= hop) { hopCount = 0; if (filled >= win) startJob(); }
+            }
 
             sm.coh = sAt(tCoh, sm.coh, aP); sm.dep = sAt(tDep, sm.dep, aP); sm.el = sAt(tEl, sm.el, aP);
             sm.wid = sAt(tWid, sm.wid, aP); sm.mot = sAt(tMot, sm.mot, aP); sm.cl = sAt(tCl, sm.cl, aP); sm.dg = sAt(tDg, sm.dg, aP);
@@ -711,7 +966,7 @@ private:
             dlL.push(xl); dlR.push(xr);
             double dLd = kBaseLatency + std::max(0.0, delaySm);   // R lags -> delay L
             double dRd = kBaseLatency + std::max(0.0, -delaySm);  // L lags -> delay R
-            float al = dlL.lagrange(dLd), ar = dlR.lagrange(dRd);
+            float al = fdL.read(dlL, dLd), ar = fdR.read(dlR, dRd);   // 1.0.3: windowed sinc (integer delays read directly)
             // limited all-pass on R with crossfade on change
             float apOut;
             float cur = apCurIdx >= 0 ? apCur.process(ar) : ar;
@@ -727,7 +982,7 @@ private:
             float M = 0.5f * (al + apOut), S = 0.5f * (al - apOut);
             float m0, m1, m2, s0, s1, s2;
             splitM.process(M, m0, m1, m2); splitS.process(S, s0, s1, s2);
-            traj.step(sm.mot, P.bpm, prof.vmaxScale);
+            if (ctl) traj.step(sm.mot, P.bpm, prof.vmaxScale);
             float pan = (float) traj.p;
             float wmod = 1.f + 0.2f * sm.mot * (float) traj.wm;
             float gLow = std::min(sm.wid, 1.f);                    // sub never widened
@@ -741,7 +996,9 @@ private:
             // ---------------- ENGINE 2: DEPTH
             float dep = sm.dep;
             float shelf = -6.f * dep;
-            if (std::fabs(shelf - shelfDb) > 0.05f) { shL.highshelf(fs, 4500, shelf); shR.highshelf(fs, 4500, shelf); shelfDb = shelf; }
+            // 1.0.3: the shelf follows DEPTH every sample while it moves (0.05 dB coefficient steps made HF artefacts at -71 dB
+            // under DEPTH/MIX automation); with DEPTH still the coefficients are the same as before
+            if (shelf != shelfDb) { shL.highshelfCS(shelfCos, shelfSin, shelf); shR.highshelfCS(shelfCos, shelfSin, shelf); shelfDb = shelf; }
             // level-neutral depth: distance comes from reflections, pre-delay and HF damping, not from turning the source down
             // (a level drop biases every A/B against BYPASS; measured -1.4 dB at default before this change)
             float cl1 = dep > 0.f ? shL.process(l1) : l1;
@@ -759,7 +1016,8 @@ private:
             rev.process(M, dep, sm.cl, predelay, prof.erTimeScale, rt, eL, eR, lL, lR);
             if (sm.el != cEl) { cEl = sm.el; cCos = std::cos(sm.el * (float) kPi * 0.5f); cSin = std::sin(sm.el * (float) kPi * 0.5f); }
             float ge = cCos, gl = cSin * prof.lateScale;
-            float wetLvl = dep * dbToLin(-24.f + 18.f * dep);
+            if (dep != cWetDep) { cWetDep = dep; cWetLvl = dep * dbToLin(-24.f + 18.f * dep); }
+            const float wetLvl = cWetLvl;
             float wl = wetLvl * (ge * eL + gl * lL), wr = wetLvl * (ge * eR + gl * lR);
             // DEPTH GUARD: cap wet/direct energy ratio
             wetEnv = aEnv * wetEnv + (1 - aEnv) * 0.5 * ((double) wl * wl + (double) wr * wr);
@@ -778,6 +1036,7 @@ private:
         // ---------------- FAIL-SAFE: mono-loss / correlation predictor on second moments (fixed 64-sample grid)
         const float mStep = (float) monStep;
         if (monPrev < 0) { for (int k = 0; k < 3; ++k) monG[k] = (k == P.monitor) ? 1.f : 0.f; monPrev = P.monitor; }
+        const bool mOn = metersOn.load(std::memory_order_relaxed);
         for (int i = 0; i < n; ++i) {
             double a = bL[i], b = bR[i], c = dL[i], d = dR[i];
             frameAcc[0] += a * a; frameAcc[1] += b * b; frameAcc[2] += a * b; frameAcc[3] += c * c; frameAcc[4] += d * d;
@@ -792,7 +1051,7 @@ private:
                 sEnd = sTarget < sStart ? sTarget : (float) std::min<double>(sTarget, sStart + kFrame / (0.4 * fs));
             }
             float oL = bL[i] + s * dL[i], oR = bR[i] + s * dR[i];
-            meterSample(inL[i], inR[i], oL, oR);
+            if (mOn) meterSample(inL[i], inR[i], oL, oR);
             // monitor: continuous per-source gains (click-free under any switching rate)
             float srcL[3] = { ddL[i], oL, oL - ddL[i] }, srcR[3] = { ddR[i], oR, oR - ddR[i] };
             float selL = 0, selR = 0;
@@ -849,9 +1108,11 @@ private:
 
     void meterSample(float il, float ir, float ol, float orr) {
         float mi = 0.5f * (il + ir), si = 0.5f * (il - ir), mo = 0.5f * (ol + orr), so = 0.5f * (ol - orr);
-        float im[3], is[3], om[3], os[3];
-        anInM.process(mi, im[0], im[1], im[2]); anInS.process(si, is[0], is[1], is[2]);
-        anOutM.process(mo, om[0], om[1], om[2]); anOutS.process(so, os[0], os[1], os[2]);
+        const float x4[4] = { mi, si, mo, so };
+        float l4[4], m4[4], h4[4];
+        an.process(x4, l4, m4, h4);
+        const float im[3] = { l4[0], m4[0], h4[0] }, is[3] = { l4[1], m4[1], h4[1] };
+        const float om[3] = { l4[2], m4[2], h4[2] }, os[3] = { l4[3], m4[3], h4[3] };
         const double a = aMeter;
         for (int b = 0; b < 3; ++b) {
             bIn[b].mm = a * bIn[b].mm + (1 - a) * im[b] * im[b]; bIn[b].ss = a * bIn[b].ss + (1 - a) * is[b] * is[b];
@@ -865,9 +1126,29 @@ private:
     }
     double aMeter = 0.9999;
 
+    void resetMeterStates() {
+        an.reset(); daIn.reset(); daOut.reset();
+        for (auto& b : bIn) b = MS3{};
+        for (auto& b : bOut) b = MS3{};
+        fullIn = fullOut = MS3{};
+    }
+
     void publishMeters(int n, const Params& P) {
-        aMeter = std::exp(-1.0 / (0.300 * fs));
         (void) n;
+        // always: phase / fail-safe / guard / motion state (cheap, used by SOLVE SPACE and the status line)
+        meters.lagMs.store((float) (lastLag / fs * 1000.0));
+        meters.appliedDelayMs.store((float) (delaySm / fs * 1000.0));
+        meters.phaseConfidence.store((float) lastConf);
+        meters.allpassIdx.store(apCurIdx);
+        meters.wetRatioDb.store(wetEnv > 1e-14 && dirEnv > 1e-14 ? (float) (10 * std::log10(guardGain * guardGain * wetEnv / dirEnv)) : -120.f);
+        meters.guardGainDb.store(20.f * std::log10(std::max(1e-6f, guardGain)));
+        meters.safeScale.store(sPrev);
+        meters.reduction.store(1.f - sPrev);
+        meters.pan.store((float) traj.p); meters.widthMod.store((float) traj.wm);
+        const bool mOn = metersOn.load(std::memory_order_relaxed);
+        if (mOn && !metersWereOn) resetMeterStates();   // fresh start after the view was closed (stale state otherwise)
+        metersWereOn = mOn;
+        if (!mOn) return;
         float ciF = corrFromMS(fullIn.mm, fullIn.ss, fullIn.ms), coF = corrFromMS(fullOut.mm, fullOut.ss, fullOut.ms);
         float mlI = monoLossDbFromMS(fullIn.mm, fullIn.ss), mlO = monoLossDbFromMS(fullOut.mm, fullOut.ss);
         meters.corrIn.store(ciF); meters.corrOut.store(coF);
@@ -882,18 +1163,9 @@ private:
         }
         meters.integrityIn.store(integrityScore(mlI, ciF, meters.bandIn[0].corr.load(), meters.bandIn[0].balance.load()));
         meters.integrityOut.store(integrityScore(mlO, coF, meters.bandOut[0].corr.load(), meters.bandOut[0].balance.load()));
-        meters.lagMs.store((float) (lastLag / fs * 1000.0));
-        meters.appliedDelayMs.store((float) (delaySm / fs * 1000.0));
-        meters.phaseConfidence.store((float) lastConf);
-        meters.allpassIdx.store(apCurIdx);
         meters.depthIn.store(daIn.depthIndexAbs(ciF)); meters.depthOut.store(daOut.depthIndexRel(daIn, ciF, coF));
         meters.earlyLateDbIn.store(daIn.earlyLateDb()); meters.earlyLateDbOut.store(daOut.earlyLateDb());
         meters.hfIn.store(daIn.hfRatio()); meters.hfOut.store(daOut.hfRatio());
-        meters.wetRatioDb.store(wetEnv > 1e-14 && dirEnv > 1e-14 ? (float) (10 * std::log10(guardGain * guardGain * wetEnv / dirEnv)) : -120.f);
-        meters.guardGainDb.store(20.f * std::log10(std::max(1e-6f, guardGain)));
-        meters.safeScale.store(sPrev);
-        meters.reduction.store(1.f - sPrev);
-        meters.pan.store((float) traj.p); meters.widthMod.store((float) traj.wm);
         double lvl = 0.5 * (fullIn.mm + fullIn.ss) * 2.0;
         meters.levelDb.store(lvl > 1e-12 ? (float) (10 * std::log10(lvl)) : -120.f);
         float levelConf = clamp01((meters.levelDb.load() + 60.f) / 30.f);

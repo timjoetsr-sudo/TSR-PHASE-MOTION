@@ -46,6 +46,11 @@ public:
     // Message thread: apply SOLVE SPACE recommendation. Returns true if anything changed.
     bool solveSpace();
 
+    // 1.0.3: the meters and the vectorscope feed only serve the window. While no editor is open they are not computed
+    // (about a third of the CPU); the audio is bit-identical either way.
+    void editorOpened() { if (openEditors.fetch_add (1) == 0) engine.setMetersActive (true); }
+    void editorClosed() { if (openEditors.fetch_sub (1) == 1) engine.setMetersActive (false); }
+
     // Vectorscope feed (audio thread writes, UI reads): mid/side of input and output, every 2nd sample, lock-free ring
     struct Scope {
         static constexpr int N = 2048;
@@ -61,6 +66,7 @@ private:
     void runEngine (juce::AudioBuffer<float>&, bool forceBypass);
 
     tsr::SpatialEngine engine;
+    std::atomic<int> openEditors { 0 };
     juce::AudioProcessorParameter* bypassParam = nullptr;
     std::atomic<float>* p[12] {};
     Scope sc; int scPhase = 0;

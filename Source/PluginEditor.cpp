@@ -611,6 +611,7 @@ private:
 // ------------------------------------------------------------------ editor
 TSREditor::TSREditor (TSRProcessor& p) : AudioProcessorEditor (&p), proc (p)
 {
+    proc.editorOpened();   // 1.0.3: meters + vectorscope feed run only while a window is open
     panel = std::make_unique<tsrui::Panel> (p);
     addAndMakeVisible (*panel);
     setResizable (true, true);
@@ -619,7 +620,7 @@ TSREditor::TSREditor (TSRProcessor& p) : AudioProcessorEditor (&p), proc (p)
     setSize (baseW, baseH);
     startTimerHz (30);
 }
-TSREditor::~TSREditor() { stopTimer(); }
+TSREditor::~TSREditor() { stopTimer(); proc.editorClosed(); }
 void TSREditor::paint (juce::Graphics& g) { g.fillAll (juce::Colour (0xff0b0d0f)); }
 void TSREditor::resized()
 {
