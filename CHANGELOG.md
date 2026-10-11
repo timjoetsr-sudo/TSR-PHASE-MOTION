@@ -16,28 +16,32 @@ Tutto misurato contro la 1.0.2 sulla stessa macchina, con una copia congelata de
   Stem PIANO (188 s, default): 12 episodi di correzione → 0.
   Costo: un ritardo nuovo che compare dopo 20 s di materiale allineato si aggancia in 4,2 s invece di 1,2 s.
   Avvio a freddo (1,3 s) e rilascio (0,8 s) invariati.
-- **Automazione di DEPTH e MIX senza click:** i filtri si ricalcolano in modo continuo. Energia sopra 4 kHz con il
-  parametro commutato min↔max ogni 250 ms: DEPTH −70,99 → −108,93 dB, MIX −72,55 → −118,65 dB.
-- **Sample rate sotto 11 kHz:** le frequenze dei filtri restano sotto Nyquist. A 8 kHz la 1.0.2 produceva 47.691 campioni
-  NaN in 6 s (default); la 1.0.3 nessuno.
+- **Automazione di DEPTH e MIX senza click:** lo shelf di DEPTH e il passa-basso del send seguono il valore a ogni campione
+  (nella 1.0.2 si ricalcolavano a scatti di 0,05 dB e 50 Hz). Energia sopra 4 kHz con il parametro commutato min↔max
+  ogni 250 ms: DEPTH −70,99 → −108,93 dB, MIX −72,55 → −118,65 dB.
+- **Sample rate sotto 11 kHz:** le frequenze dei filtri restano sotto Nyquist. A 8 kHz, ai default, la 1.0.2 dava 47.691
+  campioni non validi (NaN o Inf in L o R) su 6 s; la 1.0.3 nessuno, a ogni sample rate da 8 a 384 kHz.
 - **CPU.** Meter e vettorscopio calcolati solo con la finestra aperta; filtri dei meter in 4 corsie parallele; prime
   riflessioni e filtri in cache; analisi PHASE distribuita su più blocchi. 48 kHz, blocco 512, default (Xeon 2,1 GHz, Linux):
   2,25 % di un core → 1,91 % con la finestra aperta (−15 %), 1,31 % con la finestra chiusa (−42 %).
   Blocco peggiore a 96 kHz / 32 campioni, tutto al massimo: 14,2 % → 5,6 % del tempo del blocco.
   Istruzioni eseguite (callgrind, 20 s di mix): 3,81 → 3,34 miliardi (finestra aperta), 2,48 miliardi (finestra chiusa).
-  Lo script del Mac esegue lo stesso confronto su Apple Silicon (`benchmark_cpu.txt`).
+  Apple Silicon (runner GitHub macos-14, macchina virtuale condivisa, misure più rumorose): 1,51 % → 1,27 % (−16 %) e
+  0,93 % (−39 %); blocco peggiore a 96 kHz / 32: 14,8 % → 4,3 %.
 - **Suono invariato dove PHASE non interviene:** null test su 20 stem, ai default e tutto al massimo: campioni identici
-  bit per bit, o differenze sotto −480 dBFS dovute solo al punto in cui scatta la protezione dai numeri subnormali.
+  bit per bit, o differenze sotto −480 dBFS dovute solo al punto in cui scatta la protezione dai numeri subnormali
+  (con la protezione disattivata in entrambe le versioni le uscite coincidono bit per bit su tutti i 14 stem interessati).
   Unica differenza voluta: PIANO, perché la 1.0.3 non applica le correzioni nota per nota.
 - Nuovi test T32–T40: EngineTests da 41 a 51.
 
 Non cambiato, di proposito:
 - Riverbero DEPTH (4 linee), risposta all'impulso identica alla 1.0.2: densità d'eco bassa all'inizio (densità d'eco
   normalizzata ≤ 0,33 fino a 80 ms, coda densa solo da ~190 ms). Cambiarlo cambierebbe il carattere.
-- MONO SAFETY su materiale molto largo: fino a ~30 riduzioni brusche al minuto (PERCUSION LOOP). Un hold provato
-  peggiorava le percussioni e non è stato applicato.
+- MONO SAFETY: comportamento identico alla 1.0.2, campione per campione. Su materiale molto largo resta nervoso: circa
+  30 riduzioni brusche al minuto su PERCUSION LOOP. Un hold di 100–500 ms, provato, aumentava la riduzione media
+  (RIM 5,0 → 7,6–18,1 %, PERCUSION LOOP 31,4 → 35,6–48,1 %) e su RIM anche l'oscillazione: non applicato.
 - Ai default DEPTH scurisce gli alti (−2,5 dB a 8 kHz, −2,9 dB da 12 a 20 kHz) e alza di +0,4…+0,6 dB sotto i 2 kHz per
-  compensare il livello: è il comportamento di progetto, uguale alla 1.0.2.
+  compensare il livello (con DEPTH a 0 la risposta è piatta): è il comportamento di progetto, uguale alla 1.0.2.
 
 ## 1.0.2 — WIDTH/MOTION corretti in fase, mono safety più chiaro
 
