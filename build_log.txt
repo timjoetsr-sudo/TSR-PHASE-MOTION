@@ -1,0 +1,431 @@
+== 1/7 configurazione TSR PHASE DEPTH MOTION 1.0.4 (universale arm64 + x86_64, macOS 11+) ==
+-- The C compiler identification is AppleClang 15.0.0.15000309
+-- The CXX compiler identification is AppleClang 15.0.0.15000309
+-- Detecting C compiler ABI info
+-- Detecting C compiler ABI info - done
+-- Check for working C compiler: /usr/bin/cc - skipped
+-- Detecting C compile features
+-- Detecting C compile features - done
+-- Detecting CXX compiler ABI info
+-- Detecting CXX compiler ABI info - done
+-- Check for working CXX compiler: /usr/bin/c++ - skipped
+-- Detecting CXX compile features
+-- Detecting CXX compile features - done
+-- Configuring juceaide
+-- Building juceaide
+-- Exporting juceaide
+-- Testing juceaide
+-- Finished setting up juceaide
+-- Configuring done (61.8s)
+-- Generating done (0.1s)
+-- Build files have been written to: /Users/runner/work/TSR-PHASE-MOTION/TSR-PHASE-MOTION/build-mac
+== 2/7 build AU, VST3, Standalone, test ==
+[  2%] Generating juce_binarydata_TSRPDMBinary/JuceLibraryCode/BinaryData1.cpp, juce_binarydata_TSRPDMBinary/JuceLibraryCode/BinaryData2.cpp, juce_binarydata_TSRPDMBinary/JuceLibraryCode/BinaryData3.cpp, juce_binarydata_TSRPDMBinary/JuceLibraryCode/BinaryData4.cpp, juce_binarydata_TSRPDMBinary/JuceLibraryCode/BinaryData5.cpp, juce_binarydata_TSRPDMBinary/JuceLibraryCode/BinaryData.h
+[  4%] Building CXX object CMakeFiles/TSRPDMBinary.dir/juce_binarydata_TSRPDMBinary/JuceLibraryCode/BinaryData1.cpp.o
+[  8%] Building CXX object CMakeFiles/TSRPDMBinary.dir/juce_binarydata_TSRPDMBinary/JuceLibraryCode/BinaryData2.cpp.o
+[  8%] Building CXX object CMakeFiles/TSRPDMBinary.dir/juce_binarydata_TSRPDMBinary/JuceLibraryCode/BinaryData3.cpp.o
+[ 11%] Building CXX object CMakeFiles/TSRPDMBinary.dir/juce_binarydata_TSRPDMBinary/JuceLibraryCode/BinaryData4.cpp.o
+[ 13%] Building CXX object CMakeFiles/TSRPDMBinary.dir/juce_binarydata_TSRPDMBinary/JuceLibraryCode/BinaryData5.cpp.o
+[ 15%] Linking CXX static library libTSRPDMBinary.a
+[ 15%] Built target TSRPDMBinary
+[ 17%] Building CXX object CMakeFiles/TSRPhaseDepthMotion.dir/Source/PluginEditor.cpp.o
+[ 20%] Building CXX object CMakeFiles/TSRPhaseDepthMotion.dir/JUCE/modules/juce_audio_processors/juce_audio_processors.mm.o
+[ 22%] Building CXX object CMakeFiles/TSRPhaseDepthMotion.dir/Source/PluginProcessor.cpp.o
+In file included from /Users/runner/work/TSR-PHASE-MOTION/TSR-PHASE-MOTION/Source/PluginProcessor.cpp:1:
+In file included from /Users/runner/work/TSR-PHASE-MOTION/TSR-PHASE-MOTION/Source/PluginProcessor.h:3:
+/Users/runner/work/TSR-PHASE-MOTION/TSR-PHASE-MOTION/Source/dsp/SpatialEngine.h:405:16: warning: comparing floating point with == or != is unsafe [-Wfloat-equal]
+        if (dt != cDt) { cDt = dt; cA = std::exp(-dt / 0.150); }
+            ~~ ^  ~~~
+/Users/runner/work/TSR-PHASE-MOTION/TSR-PHASE-MOTION/Source/dsp/SpatialEngine.h:484:16: warning: comparing floating point with == or != is unsafe [-Wfloat-equal]
+        if (fc != lastSendFc) { sendLp.lowpass(fs, std::min<double>(fc, 0.45 * fs), 0.707); lastSendFc = fc; }
+            ~~ ^  ~~~~~~~~~~
+/Users/runner/work/TSR-PHASE-MOTION/TSR-PHASE-MOTION/Source/dsp/SpatialEngine.h:486:24: warning: comparing floating point with == or != is unsafe [-Wfloat-equal]
+        if (predelayMs != cPd || erScale != cEr || centerLock != cCl) updateTaps(centerLock, predelayMs, erScale);
+            ~~~~~~~~~~ ^  ~~~
+/Users/runner/work/TSR-PHASE-MOTION/TSR-PHASE-MOTION/Source/dsp/SpatialEngine.h:486:42: warning: comparing floating point with == or != is unsafe [-Wfloat-equal]
+        if (predelayMs != cPd || erScale != cEr || centerLock != cCl) updateTaps(centerLock, predelayMs, erScale);
+                                 ~~~~~~~ ^  ~~~
+/Users/runner/work/TSR-PHASE-MOTION/TSR-PHASE-MOTION/Source/dsp/SpatialEngine.h:486:63: warning: comparing floating point with == or != is unsafe [-Wfloat-equal]
+        if (predelayMs != cPd || erScale != cEr || centerLock != cCl) updateTaps(centerLock, predelayMs, erScale);
+                                                   ~~~~~~~~~~ ^  ~~~
+/Users/runner/work/TSR-PHASE-MOTION/TSR-PHASE-MOTION/Source/dsp/SpatialEngine.h:496:19: warning: comparing floating point with == or != is unsafe [-Wfloat-equal]
+        if (depth != cDepth) { cDepth = depth; cDampA = std::exp(-2 * kPi * (8000.0 - 5500.0 * depth) / fs); }
+            ~~~~~ ^  ~~~~~~
+/Users/runner/work/TSR-PHASE-MOTION/TSR-PHASE-MOTION/Source/dsp/SpatialEngine.h:497:18: warning: comparing floating point with == or != is unsafe [-Wfloat-equal]
+        if (rt60 != cRt) { cRt = rt60; for (int i = 0; i < 4; ++i) cG[i] = std::pow(10.0, -3.0 * (fdnLen[i] / fs) / std::max(0.05f, rt60)); }
+            ~~~~ ^  ~~~
+In file included from /Users/runner/work/TSR-PHASE-MOTION/TSR-PHASE-MOTION/Source/PluginEditor.cpp:1:
+In file included from /Users/runner/work/TSR-PHASE-MOTION/TSR-PHASE-MOTION/Source/PluginEditor.h:3:
+In file included from /Users/runner/work/TSR-PHASE-MOTION/TSR-PHASE-MOTION/Source/PluginProcessor.h:3:
+/Users/runner/work/TSR-PHASE-MOTION/TSR-PHASE-MOTION/Source/dsp/SpatialEngine.h:405:16: warning: comparing floating point with == or != is unsafe [-Wfloat-equal]
+        if (dt != cDt) { cDt = dt; cA = std::exp(-dt / 0.150); }
+            ~~ ^  ~~~
+/Users/runner/work/TSR-PHASE-MOTION/TSR-PHASE-MOTION/Source/dsp/SpatialEngine.h:484:16: warning: comparing floating point with == or != is unsafe [-Wfloat-equal]
+        if (fc != lastSendFc) { sendLp.lowpass(fs, std::min<double>(fc, 0.45 * fs), 0.707); lastSendFc = fc; }
+            ~~ ^  ~~~~~~~~~~
+/Users/runner/work/TSR-PHASE-MOTION/TSR-PHASE-MOTION/Source/dsp/SpatialEngine.h:486:24: warning: comparing floating point with == or != is unsafe [-Wfloat-equal]
+        if (predelayMs != cPd || erScale != cEr || centerLock != cCl) updateTaps(centerLock, predelayMs, erScale);
+            ~~~~~~~~~~ ^  ~~~
+/Users/runner/work/TSR-PHASE-MOTION/TSR-PHASE-MOTION/Source/dsp/SpatialEngine.h:486:42: warning: comparing floating point with == or != is unsafe [-Wfloat-equal]
+        if (predelayMs != cPd || erScale != cEr || centerLock != cCl) updateTaps(centerLock, predelayMs, erScale);
+                                 ~~~~~~~ ^  ~~~
+/Users/runner/work/TSR-PHASE-MOTION/TSR-PHASE-MOTION/Source/dsp/SpatialEngine.h:486:63: warning: comparing floating point with == or != is unsafe [-Wfloat-equal]
+        if (predelayMs != cPd || erScale != cEr || centerLock != cCl) updateTaps(centerLock, predelayMs, erScale);
+                                                   ~~~~~~~~~~ ^  ~~~
+/Users/runner/work/TSR-PHASE-MOTION/TSR-PHASE-MOTION/Source/dsp/SpatialEngine.h:496:19: warning: comparing floating point with == or != is unsafe [-Wfloat-equal]
+        if (depth != cDepth) { cDepth = depth; cDampA = std::exp(-2 * kPi * (8000.0 - 5500.0 * depth) / fs); }
+            ~~~~~ ^  ~~~~~~
+/Users/runner/work/TSR-PHASE-MOTION/TSR-PHASE-MOTION/Source/dsp/SpatialEngine.h:497:18: warning: comparing floating point with == or != is unsafe [-Wfloat-equal]
+        if (rt60 != cRt) { cRt = rt60; for (int i = 0; i < 4; ++i) cG[i] = std::pow(10.0, -3.0 * (fdnLen[i] / fs) / std::max(0.05f, rt60)); }
+            ~~~~ ^  ~~~
+/Users/runner/work/TSR-PHASE-MOTION/TSR-PHASE-MOTION/Source/dsp/SpatialEngine.h:969:51: warning: comparing floating point with == or != is unsafe [-Wfloat-equal]
+            if (std::fabs(delaySm) < 1e-6 && want == 0) delaySm = 0;
+                                             ~~~~ ^  ~
+/Users/runner/work/TSR-PHASE-MOTION/TSR-PHASE-MOTION/Source/dsp/SpatialEngine.h:1005:23: warning: comparing floating point with == or != is unsafe [-Wfloat-equal]
+            if (shelf != shelfDb) { shL.highshelfCS(shelfCos, shelfSin, shelf); shR.highshelfCS(shelfCos, shelfSin, shelf); shelfDb = shelf; }
+                ~~~~~ ^  ~~~~~~~
+/Users/runner/work/TSR-PHASE-MOTION/TSR-PHASE-MOTION/Source/dsp/SpatialEngine.h:1021:23: warning: comparing floating point with == or != is unsafe [-Wfloat-equal]
+            if (sm.el != cEl) { cEl = sm.el; cCos = std::cos(sm.el * (float) kPi * 0.5f); cSin = std::sin(sm.el * (float) kPi * 0.5f); }
+                ~~~~~ ^  ~~~
+/Users/runner/work/TSR-PHASE-MOTION/TSR-PHASE-MOTION/Source/dsp/SpatialEngine.h:1023:21: warning: comparing floating point with == or != is unsafe [-Wfloat-equal]
+            if (dep != cWetDep) { cWetDep = dep; cWetLvl = dep * dbToLin(-24.f + 18.f * dep); }
+                ~~~ ^  ~~~~~~~
+/Users/runner/work/TSR-PHASE-MOTION/TSR-PHASE-MOTION/Source/dsp/SpatialEngine.h:1030:23: warning: comparing floating point with == or != is unsafe [-Wfloat-equal]
+            if (sm.dg != cDg) { cDg = sm.dg; cCap = std::pow(10.0, capDb / 10.0); }
+                ~~~~~ ^  ~~~
+/Users/runner/work/TSR-PHASE-MOTION/TSR-PHASE-MOTION/Source/dsp/SpatialEngine.h:969:51: warning: comparing floating point with == or != is unsafe [-Wfloat-equal]
+            if (std::fabs(delaySm) < 1e-6 && want == 0) delaySm = 0;
+                                             ~~~~ ^  ~
+/Users/runner/work/TSR-PHASE-MOTION/TSR-PHASE-MOTION/Source/dsp/SpatialEngine.h:1005:23: warning: comparing floating point with == or != is unsafe [-Wfloat-equal]
+            if (shelf != shelfDb) { shL.highshelfCS(shelfCos, shelfSin, shelf); shR.highshelfCS(shelfCos, shelfSin, shelf); shelfDb = shelf; }
+                ~~~~~ ^  ~~~~~~~
+/Users/runner/work/TSR-PHASE-MOTION/TSR-PHASE-MOTION/Source/dsp/SpatialEngine.h:1021:23: warning: comparing floating point with == or != is unsafe [-Wfloat-equal]
+            if (sm.el != cEl) { cEl = sm.el; cCos = std::cos(sm.el * (float) kPi * 0.5f); cSin = std::sin(sm.el * (float) kPi * 0.5f); }
+                ~~~~~ ^  ~~~
+/Users/runner/work/TSR-PHASE-MOTION/TSR-PHASE-MOTION/Source/dsp/SpatialEngine.h:1023:21: warning: comparing floating point with == or != is unsafe [-Wfloat-equal]
+            if (dep != cWetDep) { cWetDep = dep; cWetLvl = dep * dbToLin(-24.f + 18.f * dep); }
+                ~~~ ^  ~~~~~~~
+/Users/runner/work/TSR-PHASE-MOTION/TSR-PHASE-MOTION/Source/dsp/SpatialEngine.h:1030:23: warning: comparing floating point with == or != is unsafe [-Wfloat-equal]
+            if (sm.dg != cDg) { cDg = sm.dg; cCap = std::pow(10.0, capDb / 10.0); }
+                ~~~~~ ^  ~~~
+12 warnings generated.
+12 warnings generated.
+In file included from /Users/runner/work/TSR-PHASE-MOTION/TSR-PHASE-MOTION/Source/PluginProcessor.cpp:1:
+In file included from /Users/runner/work/TSR-PHASE-MOTION/TSR-PHASE-MOTION/Source/PluginProcessor.h:3:
+/Users/runner/work/TSR-PHASE-MOTION/TSR-PHASE-MOTION/Source/dsp/SpatialEngine.h:405:16: warning: comparing floating point with == or != is unsafe [-Wfloat-equal]
+        if (dt != cDt) { cDt = dt; cA = std::exp(-dt / 0.150); }
+            ~~ ^  ~~~
+/Users/runner/work/TSR-PHASE-MOTION/TSR-PHASE-MOTION/Source/dsp/SpatialEngine.h:484:16: warning: comparing floating point with == or != is unsafe [-Wfloat-equal]
+        if (fc != lastSendFc) { sendLp.lowpass(fs, std::min<double>(fc, 0.45 * fs), 0.707); lastSendFc = fc; }
+            ~~ ^  ~~~~~~~~~~
+/Users/runner/work/TSR-PHASE-MOTION/TSR-PHASE-MOTION/Source/dsp/SpatialEngine.h:486:24: warning: comparing floating point with == or != is unsafe [-Wfloat-equal]
+        if (predelayMs != cPd || erScale != cEr || centerLock != cCl) updateTaps(centerLock, predelayMs, erScale);
+            ~~~~~~~~~~ ^  ~~~
+/Users/runner/work/TSR-PHASE-MOTION/TSR-PHASE-MOTION/Source/dsp/SpatialEngine.h:486:42: warning: comparing floating point with == or != is unsafe [-Wfloat-equal]
+        if (predelayMs != cPd || erScale != cEr || centerLock != cCl) updateTaps(centerLock, predelayMs, erScale);
+                                 ~~~~~~~ ^  ~~~
+/Users/runner/work/TSR-PHASE-MOTION/TSR-PHASE-MOTION/Source/dsp/SpatialEngine.h:486:63: warning: comparing floating point with == or != is unsafe [-Wfloat-equal]
+        if (predelayMs != cPd || erScale != cEr || centerLock != cCl) updateTaps(centerLock, predelayMs, erScale);
+                                                   ~~~~~~~~~~ ^  ~~~
+/Users/runner/work/TSR-PHASE-MOTION/TSR-PHASE-MOTION/Source/dsp/SpatialEngine.h:496:19: warning: comparing floating point with == or != is unsafe [-Wfloat-equal]
+        if (depth != cDepth) { cDepth = depth; cDampA = std::exp(-2 * kPi * (8000.0 - 5500.0 * depth) / fs); }
+            ~~~~~ ^  ~~~~~~
+/Users/runner/work/TSR-PHASE-MOTION/TSR-PHASE-MOTION/Source/dsp/SpatialEngine.h:497:18: warning: comparing floating point with == or != is unsafe [-Wfloat-equal]
+        if (rt60 != cRt) { cRt = rt60; for (int i = 0; i < 4; ++i) cG[i] = std::pow(10.0, -3.0 * (fdnLen[i] / fs) / std::max(0.05f, rt60)); }
+            ~~~~ ^  ~~~
+/Users/runner/work/TSR-PHASE-MOTION/TSR-PHASE-MOTION/Source/dsp/SpatialEngine.h:969:51: warning: comparing floating point with == or != is unsafe [-Wfloat-equal]
+            if (std::fabs(delaySm) < 1e-6 && want == 0) delaySm = 0;
+                                             ~~~~ ^  ~
+/Users/runner/work/TSR-PHASE-MOTION/TSR-PHASE-MOTION/Source/dsp/SpatialEngine.h:1005:23: warning: comparing floating point with == or != is unsafe [-Wfloat-equal]
+            if (shelf != shelfDb) { shL.highshelfCS(shelfCos, shelfSin, shelf); shR.highshelfCS(shelfCos, shelfSin, shelf); shelfDb = shelf; }
+                ~~~~~ ^  ~~~~~~~
+/Users/runner/work/TSR-PHASE-MOTION/TSR-PHASE-MOTION/Source/dsp/SpatialEngine.h:1021:23: warning: comparing floating point with == or != is unsafe [-Wfloat-equal]
+            if (sm.el != cEl) { cEl = sm.el; cCos = std::cos(sm.el * (float) kPi * 0.5f); cSin = std::sin(sm.el * (float) kPi * 0.5f); }
+                ~~~~~ ^  ~~~
+/Users/runner/work/TSR-PHASE-MOTION/TSR-PHASE-MOTION/Source/dsp/SpatialEngine.h:1023:21: warning: comparing floating point with == or != is unsafe [-Wfloat-equal]
+            if (dep != cWetDep) { cWetDep = dep; cWetLvl = dep * dbToLin(-24.f + 18.f * dep); }
+                ~~~ ^  ~~~~~~~
+/Users/runner/work/TSR-PHASE-MOTION/TSR-PHASE-MOTION/Source/dsp/SpatialEngine.h:1030:23: warning: comparing floating point with == or != is unsafe [-Wfloat-equal]
+            if (sm.dg != cDg) { cDg = sm.dg; cCap = std::pow(10.0, capDb / 10.0); }
+                ~~~~~ ^  ~~~
+In file included from /Users/runner/work/TSR-PHASE-MOTION/TSR-PHASE-MOTION/Source/PluginEditor.cpp:1:
+In file included from /Users/runner/work/TSR-PHASE-MOTION/TSR-PHASE-MOTION/Source/PluginEditor.h:3:
+In file included from /Users/runner/work/TSR-PHASE-MOTION/TSR-PHASE-MOTION/Source/PluginProcessor.h:3:
+/Users/runner/work/TSR-PHASE-MOTION/TSR-PHASE-MOTION/Source/dsp/SpatialEngine.h:405:16: warning: comparing floating point with == or != is unsafe [-Wfloat-equal]
+        if (dt != cDt) { cDt = dt; cA = std::exp(-dt / 0.150); }
+            ~~ ^  ~~~
+/Users/runner/work/TSR-PHASE-MOTION/TSR-PHASE-MOTION/Source/dsp/SpatialEngine.h:484:16: warning: comparing floating point with == or != is unsafe [-Wfloat-equal]
+        if (fc != lastSendFc) { sendLp.lowpass(fs, std::min<double>(fc, 0.45 * fs), 0.707); lastSendFc = fc; }
+            ~~ ^  ~~~~~~~~~~
+/Users/runner/work/TSR-PHASE-MOTION/TSR-PHASE-MOTION/Source/dsp/SpatialEngine.h:486:24: warning: comparing floating point with == or != is unsafe [-Wfloat-equal]
+        if (predelayMs != cPd || erScale != cEr || centerLock != cCl) updateTaps(centerLock, predelayMs, erScale);
+            ~~~~~~~~~~ ^  ~~~
+/Users/runner/work/TSR-PHASE-MOTION/TSR-PHASE-MOTION/Source/dsp/SpatialEngine.h:486:42: warning: comparing floating point with == or != is unsafe [-Wfloat-equal]
+        if (predelayMs != cPd || erScale != cEr || centerLock != cCl) updateTaps(centerLock, predelayMs, erScale);
+                                 ~~~~~~~ ^  ~~~
+/Users/runner/work/TSR-PHASE-MOTION/TSR-PHASE-MOTION/Source/dsp/SpatialEngine.h:486:63: warning: comparing floating point with == or != is unsafe [-Wfloat-equal]
+        if (predelayMs != cPd || erScale != cEr || centerLock != cCl) updateTaps(centerLock, predelayMs, erScale);
+                                                   ~~~~~~~~~~ ^  ~~~
+/Users/runner/work/TSR-PHASE-MOTION/TSR-PHASE-MOTION/Source/dsp/SpatialEngine.h:496:19: warning: comparing floating point with == or != is unsafe [-Wfloat-equal]
+        if (depth != cDepth) { cDepth = depth; cDampA = std::exp(-2 * kPi * (8000.0 - 5500.0 * depth) / fs); }
+            ~~~~~ ^  ~~~~~~
+/Users/runner/work/TSR-PHASE-MOTION/TSR-PHASE-MOTION/Source/dsp/SpatialEngine.h:497:18: warning: comparing floating point with == or != is unsafe [-Wfloat-equal]
+        if (rt60 != cRt) { cRt = rt60; for (int i = 0; i < 4; ++i) cG[i] = std::pow(10.0, -3.0 * (fdnLen[i] / fs) / std::max(0.05f, rt60)); }
+            ~~~~ ^  ~~~
+/Users/runner/work/TSR-PHASE-MOTION/TSR-PHASE-MOTION/Source/dsp/SpatialEngine.h:969:51: warning: comparing floating point with == or != is unsafe [-Wfloat-equal]
+            if (std::fabs(delaySm) < 1e-6 && want == 0) delaySm = 0;
+                                             ~~~~ ^  ~
+/Users/runner/work/TSR-PHASE-MOTION/TSR-PHASE-MOTION/Source/dsp/SpatialEngine.h:1005:23: warning: comparing floating point with == or != is unsafe [-Wfloat-equal]
+            if (shelf != shelfDb) { shL.highshelfCS(shelfCos, shelfSin, shelf); shR.highshelfCS(shelfCos, shelfSin, shelf); shelfDb = shelf; }
+                ~~~~~ ^  ~~~~~~~
+/Users/runner/work/TSR-PHASE-MOTION/TSR-PHASE-MOTION/Source/dsp/SpatialEngine.h:1021:23: warning: comparing floating point with == or != is unsafe [-Wfloat-equal]
+            if (sm.el != cEl) { cEl = sm.el; cCos = std::cos(sm.el * (float) kPi * 0.5f); cSin = std::sin(sm.el * (float) kPi * 0.5f); }
+                ~~~~~ ^  ~~~
+/Users/runner/work/TSR-PHASE-MOTION/TSR-PHASE-MOTION/Source/dsp/SpatialEngine.h:1023:21: warning: comparing floating point with == or != is unsafe [-Wfloat-equal]
+            if (dep != cWetDep) { cWetDep = dep; cWetLvl = dep * dbToLin(-24.f + 18.f * dep); }
+                ~~~ ^  ~~~~~~~
+/Users/runner/work/TSR-PHASE-MOTION/TSR-PHASE-MOTION/Source/dsp/SpatialEngine.h:1030:23: warning: comparing floating point with == or != is unsafe [-Wfloat-equal]
+            if (sm.dg != cDg) { cDg = sm.dg; cCap = std::pow(10.0, capDb / 10.0); }
+                ~~~~~ ^  ~~~
+12 warnings generated.
+[ 24%] Building CXX object CMakeFiles/TSRPhaseDepthMotion.dir/JUCE/modules/juce_gui_extra/juce_gui_extra.mm.o
+12 warnings generated.
+[ 26%] Building CXX object CMakeFiles/TSRPhaseDepthMotion.dir/JUCE/modules/juce_gui_basics/juce_gui_basics_2.cpp.o
+[ 28%] Building CXX object CMakeFiles/TSRPhaseDepthMotion.dir/JUCE/modules/juce_gui_basics/juce_gui_basics_3.cpp.o
+[ 31%] Building CXX object CMakeFiles/TSRPhaseDepthMotion.dir/JUCE/modules/juce_gui_basics/juce_gui_basics_4.cpp.o
+[ 33%] Building CXX object CMakeFiles/TSRPhaseDepthMotion.dir/JUCE/modules/juce_gui_basics/juce_gui_basics_5.cpp.o
+[ 35%] Building CXX object CMakeFiles/TSRPhaseDepthMotion.dir/JUCE/modules/juce_gui_basics/juce_gui_basics.mm.o
+In file included from /Users/runner/work/TSR-PHASE-MOTION/TSR-PHASE-MOTION/JUCE/modules/juce_gui_basics/juce_gui_basics.mm:35:
+/Users/runner/work/TSR-PHASE-MOTION/TSR-PHASE-MOTION/JUCE/modules/juce_gui_basics/juce_gui_basics.cpp:61:2: warning: This version of JUCE does not use the splash screen, the flag JUCE_DISPLAY_SPLASH_SCREEN is ignored [-W#pragma-messages]
+ JUCE_COMPILER_WARNING ("This version of JUCE does not use the splash screen, the flag JUCE_DISPLAY_SPLASH_SCREEN is ignored")
+ ^
+/Users/runner/work/TSR-PHASE-MOTION/TSR-PHASE-MOTION/JUCE/modules/juce_core/system/juce_PlatformDefs.h:292:38: note: expanded from macro 'JUCE_COMPILER_WARNING'
+ #define JUCE_COMPILER_WARNING(msg)  _Pragma (JUCE_STRINGIFY (message (msg)))
+                                     ^
+<scratch space>:158:2: note: expanded from here
+ message ("This version of JUCE does not use the splash screen, the flag JUCE_DISPLAY_SPLASH_SCREEN is ignored")
+ ^
+[ 37%] Building CXX object CMakeFiles/TSRPhaseDepthMotion.dir/JUCE/modules/juce_graphics/juce_graphics_Harfbuzz.cpp.o
+[ 40%] Building C object CMakeFiles/TSRPhaseDepthMotion.dir/JUCE/modules/juce_graphics/juce_graphics_Sheenbidi.c.o
+[ 42%] Building CXX object CMakeFiles/TSRPhaseDepthMotion.dir/JUCE/modules/juce_graphics/juce_graphics.mm.o
+1 warning generated.
+In file included from /Users/runner/work/TSR-PHASE-MOTION/TSR-PHASE-MOTION/JUCE/modules/juce_gui_basics/juce_gui_basics.mm:35:
+/Users/runner/work/TSR-PHASE-MOTION/TSR-PHASE-MOTION/JUCE/modules/juce_gui_basics/juce_gui_basics.cpp:61:2: warning: This version of JUCE does not use the splash screen, the flag JUCE_DISPLAY_SPLASH_SCREEN is ignored [-W#pragma-messages]
+ JUCE_COMPILER_WARNING ("This version of JUCE does not use the splash screen, the flag JUCE_DISPLAY_SPLASH_SCREEN is ignored")
+ ^
+/Users/runner/work/TSR-PHASE-MOTION/TSR-PHASE-MOTION/JUCE/modules/juce_core/system/juce_PlatformDefs.h:292:38: note: expanded from macro 'JUCE_COMPILER_WARNING'
+ #define JUCE_COMPILER_WARNING(msg)  _Pragma (JUCE_STRINGIFY (message (msg)))
+                                     ^
+<scratch space>:15:2: note: expanded from here
+ message ("This version of JUCE does not use the splash screen, the flag JUCE_DISPLAY_SPLASH_SCREEN is ignored")
+ ^
+1 warning generated.
+[ 44%] Building CXX object CMakeFiles/TSRPhaseDepthMotion.dir/JUCE/modules/juce_events/juce_events.mm.o
+[ 46%] Building CXX object CMakeFiles/TSRPhaseDepthMotion.dir/JUCE/modules/juce_core/juce_core_CompilationTime.cpp.o
+[ 48%] Building CXX object CMakeFiles/TSRPhaseDepthMotion.dir/JUCE/modules/juce_core/juce_core.mm.o
+[ 51%] Building CXX object CMakeFiles/TSRPhaseDepthMotion.dir/JUCE/modules/juce_data_structures/juce_data_structures.mm.o
+[ 53%] Building CXX object CMakeFiles/TSRPhaseDepthMotion.dir/JUCE/modules/juce_audio_processors_headless/juce_audio_processors_headless_ara.cpp.o
+[ 55%] Building CXX object CMakeFiles/TSRPhaseDepthMotion.dir/JUCE/modules/juce_audio_processors_headless/juce_audio_processors_headless_lv2_libs.cpp.o
+[ 57%] Building CXX object CMakeFiles/TSRPhaseDepthMotion.dir/JUCE/modules/juce_audio_processors_headless/juce_audio_processors_headless.mm.o
+[ 60%] Building CXX object CMakeFiles/TSRPhaseDepthMotion.dir/JUCE/modules/juce_audio_basics/juce_audio_basics.mm.o
+[ 62%] Building CXX object CMakeFiles/TSRPhaseDepthMotion.dir/JUCE/modules/juce_audio_utils/juce_audio_utils.mm.o
+[ 64%] Building CXX object CMakeFiles/TSRPhaseDepthMotion.dir/JUCE/modules/juce_audio_formats/juce_audio_formats.mm.o
+[ 66%] Building CXX object CMakeFiles/TSRPhaseDepthMotion.dir/JUCE/modules/juce_audio_devices/juce_audio_devices.mm.o
+[ 68%] Building CXX object CMakeFiles/TSRPhaseDepthMotion.dir/JUCE/modules/juce_dsp/juce_dsp.mm.o
+[ 71%] Linking CXX static library "TSRPhaseDepthMotion_artefacts/Release/libTSR PHASE DEPTH MOTION_SharedCode.a"
+[ 71%] Built target TSRPhaseDepthMotion
+[ 73%] Generating TSRPhaseDepthMotion_artefacts/JuceLibraryCode/TSRPhaseDepthMotion_AU/PkgInfo
+[ 75%] Building CXX object CMakeFiles/TSRPhaseDepthMotion_AU.dir/JUCE/modules/juce_audio_plugin_client/juce_audio_plugin_client_AAX_utils.cpp.o
+[ 77%] Building CXX object CMakeFiles/TSRPhaseDepthMotion_AU.dir/JUCE/modules/juce_audio_plugin_client/juce_audio_plugin_client_Standalone.cpp.o
+[ 80%] Building CXX object CMakeFiles/TSRPhaseDepthMotion_AU.dir/JUCE/modules/juce_audio_plugin_client/juce_audio_plugin_client_ARA.cpp.o
+[ 82%] Building CXX object CMakeFiles/TSRPhaseDepthMotion_AU.dir/JUCE/modules/juce_audio_plugin_client/juce_audio_plugin_client_Unity.cpp.o
+[ 84%] Building CXX object CMakeFiles/TSRPhaseDepthMotion_AU.dir/JUCE/modules/juce_audio_plugin_client/juce_audio_plugin_client_AAX.mm.o
+[ 86%] Building CXX object CMakeFiles/TSRPhaseDepthMotion_AU.dir/JUCE/modules/juce_audio_plugin_client/juce_audio_plugin_client_AU_1.mm.o
+[ 88%] Building CXX object CMakeFiles/TSRPhaseDepthMotion_AU.dir/JUCE/modules/juce_audio_plugin_client/juce_audio_plugin_client_AU_2.mm.o
+[ 91%] Building CXX object CMakeFiles/TSRPhaseDepthMotion_AU.dir/JUCE/modules/juce_audio_plugin_client/juce_audio_plugin_client_AUv3.mm.o
+[ 93%] Building CXX object CMakeFiles/TSRPhaseDepthMotion_AU.dir/JUCE/modules/juce_audio_plugin_client/juce_audio_plugin_client_LV2.mm.o
+[ 95%] Building CXX object CMakeFiles/TSRPhaseDepthMotion_AU.dir/JUCE/modules/juce_audio_plugin_client/juce_audio_plugin_client_VST2.mm.o
+[ 97%] Building CXX object CMakeFiles/TSRPhaseDepthMotion_AU.dir/JUCE/modules/juce_audio_plugin_client/juce_audio_plugin_client_VST3.mm.o
+[100%] Linking CXX CFBundle shared module "TSRPhaseDepthMotion_artefacts/Release/AU/TSR PHASE DEPTH MOTION.component/Contents/MacOS/TSR PHASE DEPTH MOTION"
+[100%] Built target TSRPhaseDepthMotion_AU
+[  2%] Building VST3 manifest helper for TSRPhaseDepthMotion
+[ 17%] Built target TSRPDMBinary
+-- The CXX compiler identification is AppleClang 15.0.0.15000309
+-- Detecting CXX compiler ABI info
+-- Detecting CXX compiler ABI info - done
+-- Check for working CXX compiler: /usr/bin/c++ - skipped
+-- Detecting CXX compile features
+-- Detecting CXX compile features - done
+-- Configuring done (0.7s)
+-- Generating done (0.0s)
+-- Build files have been written to: /Users/runner/work/TSR-PHASE-MOTION/TSR-PHASE-MOTION/build-mac/vst3_helpers/TSRPhaseDepthMotion
+make[4]: warning: jobserver unavailable: using -j1.  Add `+' to parent make rule.
+[ 71%] Built target TSRPhaseDepthMotion
+[ 50%] Building CXX object CMakeFiles/vst3_helper.dir/Users/runner/work/TSR-PHASE-MOTION/TSR-PHASE-MOTION/JUCE/modules/juce_audio_plugin_client/VST3/juce_VST3ManifestHelper.cpp.o
+[100%] Linking CXX executable vst3_helper
+[100%] Built target vst3_helper
+[ 71%] Built target TSRPhaseDepthMotion_vst3_helper
+[ 73%] Generating TSRPhaseDepthMotion_artefacts/JuceLibraryCode/TSRPhaseDepthMotion_VST3/PkgInfo
+[ 76%] Building CXX object CMakeFiles/TSRPhaseDepthMotion_VST3.dir/JUCE/modules/juce_audio_plugin_client/juce_audio_plugin_client_Standalone.cpp.o
+[ 80%] Building CXX object CMakeFiles/TSRPhaseDepthMotion_VST3.dir/JUCE/modules/juce_audio_plugin_client/juce_audio_plugin_client_ARA.cpp.o
+[ 80%] Building CXX object CMakeFiles/TSRPhaseDepthMotion_VST3.dir/JUCE/modules/juce_audio_plugin_client/juce_audio_plugin_client_AAX_utils.cpp.o
+[ 82%] Building CXX object CMakeFiles/TSRPhaseDepthMotion_VST3.dir/JUCE/modules/juce_audio_plugin_client/juce_audio_plugin_client_Unity.cpp.o
+[ 84%] Building CXX object CMakeFiles/TSRPhaseDepthMotion_VST3.dir/JUCE/modules/juce_audio_plugin_client/juce_audio_plugin_client_AAX.mm.o
+[ 86%] Building CXX object CMakeFiles/TSRPhaseDepthMotion_VST3.dir/JUCE/modules/juce_audio_plugin_client/juce_audio_plugin_client_AU_1.mm.o
+[ 89%] Building CXX object CMakeFiles/TSRPhaseDepthMotion_VST3.dir/JUCE/modules/juce_audio_plugin_client/juce_audio_plugin_client_AU_2.mm.o
+[ 91%] Building CXX object CMakeFiles/TSRPhaseDepthMotion_VST3.dir/JUCE/modules/juce_audio_plugin_client/juce_audio_plugin_client_LV2.mm.o
+[ 93%] Building CXX object CMakeFiles/TSRPhaseDepthMotion_VST3.dir/JUCE/modules/juce_audio_plugin_client/juce_audio_plugin_client_AUv3.mm.o
+[ 95%] Building CXX object CMakeFiles/TSRPhaseDepthMotion_VST3.dir/JUCE/modules/juce_audio_plugin_client/juce_audio_plugin_client_VST2.mm.o
+[ 97%] Building CXX object CMakeFiles/TSRPhaseDepthMotion_VST3.dir/JUCE/modules/juce_audio_plugin_client/juce_audio_plugin_client_VST3.mm.o
+[100%] Linking CXX CFBundle shared module "TSRPhaseDepthMotion_artefacts/Release/VST3/TSR PHASE DEPTH MOTION.vst3/Contents/MacOS/TSR PHASE DEPTH MOTION"
+/Users/runner/work/TSR-PHASE-MOTION/TSR-PHASE-MOTION/build-mac/TSRPhaseDepthMotion_artefacts/Release/VST3/TSR PHASE DEPTH MOTION.vst3: code object is not signed at all
+-- Replacing invalid signature with ad-hoc signature
+/Users/runner/work/TSR-PHASE-MOTION/TSR-PHASE-MOTION/build-mac/TSRPhaseDepthMotion_artefacts/Release/VST3/TSR PHASE DEPTH MOTION.vst3: replacing existing signature
+removing moduleinfo.json
+creating /Users/runner/work/TSR-PHASE-MOTION/TSR-PHASE-MOTION/build-mac/TSRPhaseDepthMotion_artefacts/Release/VST3/TSR PHASE DEPTH MOTION.vst3/Contents/Resources/moduleinfo.json
+[100%] Built target TSRPhaseDepthMotion_VST3
+[ 15%] Built target TSRPDMBinary
+[ 71%] Built target TSRPhaseDepthMotion
+[ 73%] Generating TSRPhaseDepthMotion_artefacts/JuceLibraryCode/TSRPhaseDepthMotion_Standalone/PkgInfo
+[ 80%] Building CXX object CMakeFiles/TSRPhaseDepthMotion_Standalone.dir/JUCE/modules/juce_audio_plugin_client/juce_audio_plugin_client_AAX_utils.cpp.o
+[ 80%] Building CXX object CMakeFiles/TSRPhaseDepthMotion_Standalone.dir/JUCE/modules/juce_audio_plugin_client/juce_audio_plugin_client_Standalone.cpp.o
+[ 80%] Building CXX object CMakeFiles/TSRPhaseDepthMotion_Standalone.dir/JUCE/modules/juce_audio_plugin_client/juce_audio_plugin_client_ARA.cpp.o
+[ 84%] Building CXX object CMakeFiles/TSRPhaseDepthMotion_Standalone.dir/JUCE/modules/juce_audio_plugin_client/juce_audio_plugin_client_AAX.mm.o
+[ 84%] Building CXX object CMakeFiles/TSRPhaseDepthMotion_Standalone.dir/JUCE/modules/juce_audio_plugin_client/juce_audio_plugin_client_Unity.cpp.o
+[ 86%] Building CXX object CMakeFiles/TSRPhaseDepthMotion_Standalone.dir/JUCE/modules/juce_audio_plugin_client/juce_audio_plugin_client_AU_1.mm.o
+[ 88%] Building CXX object CMakeFiles/TSRPhaseDepthMotion_Standalone.dir/JUCE/modules/juce_audio_plugin_client/juce_audio_plugin_client_AU_2.mm.o
+[ 91%] Building CXX object CMakeFiles/TSRPhaseDepthMotion_Standalone.dir/JUCE/modules/juce_audio_plugin_client/juce_audio_plugin_client_AUv3.mm.o
+[ 93%] Building CXX object CMakeFiles/TSRPhaseDepthMotion_Standalone.dir/JUCE/modules/juce_audio_plugin_client/juce_audio_plugin_client_LV2.mm.o
+[ 95%] Building CXX object CMakeFiles/TSRPhaseDepthMotion_Standalone.dir/JUCE/modules/juce_audio_plugin_client/juce_audio_plugin_client_VST2.mm.o
+[ 97%] Building CXX object CMakeFiles/TSRPhaseDepthMotion_Standalone.dir/JUCE/modules/juce_audio_plugin_client/juce_audio_plugin_client_VST3.mm.o
+Copying OS X content TSRPhaseDepthMotion_artefacts/Release/Standalone/TSR PHASE DEPTH MOTION.app/Contents/Resources/RecentFilesMenuTemplate.nib
+[100%] Linking CXX executable "TSRPhaseDepthMotion_artefacts/Release/Standalone/TSR PHASE DEPTH MOTION.app/Contents/MacOS/TSR PHASE DEPTH MOTION"
+[100%] Built target TSRPhaseDepthMotion_Standalone
+[ 50%] Building CXX object CMakeFiles/EngineTests.dir/tests/engine_tests.cpp.o
+[100%] Linking CXX executable EngineTests
+[100%] Built target EngineTests
+[ 50%] Building CXX object CMakeFiles/EngineBench.dir/tests/bench.cpp.o
+[100%] Linking CXX executable EngineBench
+[100%] Built target EngineBench
+Architectures in the fat file: build-mac/TSRPhaseDepthMotion_artefacts/Release/AU/TSR PHASE DEPTH MOTION.component/Contents/MacOS/TSR PHASE DEPTH MOTION are: x86_64 arm64 
+== 3/7 test del motore DSP ==
+[PASS] T01 neutral params = identity (latency = reported)         max|err|=2.98e-08
+[PASS] T02 MIX 0% = identity even with all moves at max           max|err|=2.98e-08
+[PASS] T03 reported latency matches measured impulse delay        impulse@115 expected 115, reported=15
+[PASS] T04 sub-sample lag 0.37 ms detected+aligned @44.1k         est=0.3700 ms corr -0.009->1.000 monoLoss 0.00->-0.00 dB
+[PASS] T04 sub-sample lag 0.37 ms detected+aligned @48.0k         est=0.3700 ms corr -0.012->1.000 monoLoss 0.00->-0.00 dB
+[PASS] T04 sub-sample lag 0.37 ms detected+aligned @96.0k         est=0.3700 ms corr 0.002->1.000 monoLoss 0.00->-0.00 dB
+[PASS] T05 COHERENCE 0 -> no phase correction applied             detected=0.425 ms applied=0 ms err=3e-08
+[PASS] T06 negative lag (L late) -> R delayed                     est=-0.2000 ms corr_out=1.000
+[PASS] T07 uncorrelated input -> no false alignment               applied=0.0000 ms conf=0.046
+[PASS] T08 limited all-pass fixes low-band phase rotation         ap idx=2 corr_low -0.216->1.000
+[PASS] T09 WIDTH 200% respects MONO SAFETY 94% (100ms windows)    worst dMono=-0.25 dB (lim -0.83) worst corr=0.493 (floor 0.464) red=87%
+[PASS] T09 WIDTH 200% respects MONO SAFETY 50% (100ms windows)    worst dMono=-1.11 dB (lim -3.25) worst corr=0.226 (floor 0.200) red=44%
+[PASS] T09 WIDTH 200% respects MONO SAFETY 0% (100ms windows)     worst dMono=-2.08 dB (lim -6.00) worst corr=-0.023 (floor -0.100) red=0%
+[PASS] T10 fail-safe declares reduction (MS 100%) / none (MS 0%)  reduction MS100=89.8% MS0=0.0% predicted dMono(s=1)=-2.02 dB
+[PASS] T11 width+motion never change the mono sum (L+R)           max|dMono|=5.96e-08
+[PASS] T12 sub (50 Hz) stays centred under max motion+width       worst L/R level diff=0.0370 dB
+[PASS] T13 CENTER LOCK 100%: 1 kHz lead stays centred             worst L/R diff=0.075 dB
+[PASS] T13 CENTER LOCK 0%: 1 kHz lead moves                       worst L/R diff=2.520 dB
+[PASS] T14 motion density limit (velocity, acceleration, excursion) max|v|=0.420000 (lim 0.420000) max|a|=1.50000 (lim 1.50) max|p|=0.3499961
+[PASS] T15 DRUMS profile halves motion speed (anti-pumping)       max|v| music=0.4200 drums=0.2100
+[PASS] T16 DEPTH 100% moves source back (depth idx, early/late, HF) depthIdx 0.00->0.32  early/late 119.2->29.3 dB HF 0.812->0.592
+[PASS] T17 DEPTH GUARD 0% caps wet/direct energy                  wet/dir=-22.12 dB cap=-15.00 dB guard gain=0.00 dB
+[PASS] T17 DEPTH GUARD 50% caps wet/direct energy                 wet/dir=-24.04 dB cap=-24.00 dB guard gain=-1.93 dB
+[PASS] T17 DEPTH GUARD 100% caps wet/direct energy                wet/dir=-33.04 dB cap=-33.00 dB guard gain=-10.93 dB
+[PASS] T18 CENTER LOCK 100%: early refl. mirrored, late tail balanced corr(early only)=1.00000  balance(late)=0.0013
+[PASS] T19 fail-safe also bounds DEPTH reflections in mono        worst dMono=-0.07 dB (lim -0.50)
+[PASS] T20 MONITOR: DELTA = TSR - ORIGINAL, ORIGINAL = input      delta err=0 original err=0
+[PASS] T21 BYPASS = latency-compensated input                     err after fade=7.45e-09 (whole=0.0916)
+[PASS] T22 robustness: NaN/Inf input, extreme gain, silence->silence finite=1 peak=50.3 silence max=0
+[PASS] T23 block sizes 1..4096: neutral exact, default finite     bs1:3e-08 bs7:3e-08 bs64:3e-08 bs333:3e-08 bs4096:3e-08 
+[PASS] T24 SOLVE SPACE: coherence->100% on lag, width->safe value coh 0.30->1.00  width 2.00->1.104
+[PASS] T25 CPU: default params, 48 kHz stereo                     0.039 s for 3.0 s audio -> 1.3% of 1 core (x77 realtime)
+[PASS] T26 re-prepare 44.1k -> 96k == fresh engine                max diff=0
+[PASS] T27 wide detuned synth: no false time alignment            time with delay>0.05ms=0.00% max applied=0.000 ms
+[PASS] T28 denormal guard (no FTZ): silence after signal          subnormal out=0  cpu silence/signal=0.71
+[PASS] T29 defaults are level-neutral (mono source)               level change=+0.01 dB
+[PASS] T30 defaults are level-neutral (bright, hi-hat-like)       level change=+0.03 dB
+[PASS] T31a harmless settings on wide stereo: fail-safe stays off mean reduction=0.0% (corr in 0.35)
+[PASS] T31b defaults on already-wide stereo: integrity not lowered mean reduction=90%  integrity 81.4 -> 81.2
+[PASS] T31d defaults on ordinary stereo: moves applied, integrity not lowered mean reduction=0%  integrity 98.0 -> 98.0  corr 0.94
+[PASS] T31c defaults never degrade already-problematic stereo     corr -0.154 -> -0.123  mono loss -3.65 -> -3.51 dB
+[PASS] T32 8 / 11 / 16 kHz: finite, bounded (default + max)       8000Hz/def:0.81 8000Hz/max:1.04 11025Hz/def:0.81 11025Hz/max:1.15 16000Hz/def:0.82 16000Hz/max:1.18 (peak)
+[PASS] T33 PHASE half-sample delay flat to 18 kHz @44.1k          10k:+0.003 14k:+0.004 16k:+0.000 18k:-0.006 (L-R dB) lag 0.2154 ms
+[PASS] T33 PHASE half-sample delay flat to 18 kHz @48.0k          10k:+0.006 14k:+0.001 16k:-0.012 18k:+0.001 (L-R dB) lag 0.1979 ms
+[PASS] T34 DEPTH / MIX automation: no HF artefacts                HF(>4k)/total: DEPTH -108.7 dB  MIX -118.6 dB
+[PASS] T35 meters off -> identical audio                          differing samples=0 of 288000
+[PASS] T36 defaults: bit-identical for block sizes 1..4096        bs1:0 bs7:0 bs64:0 bs333:0 bs4096:0 (differing samples)
+[PASS] T37 == 1.0.2 bit for bit (no PHASE delay, MONO SAFETY off) cfg0:0 cfg1:0 cfg2:0 (differing samples)
+[PASS] T38 sub-sample lag estimate within 0.05 samples            4.25:-0.0337 20.75:+0.0339 13.30:-0.0332 (error, samples)
+[PASS] T39 spaced pair: PHASE does not chase note-dependent delays 1.0.3: 9 corrections, 23% of the time | 1.0.2: 31 corrections, 82% of the time
+[PASS] T40 hi-hat bursts, 2 mics: lag held, |r| <= 1              1.0.3: blocks off-target 0, max conf 0.837 | 1.0.2: blocks off-target 0, max conf 0.9
+[PASS] T41 MONO SAFETY: fall >= 20 ms, still protects wide input  largest fall per 64 samples 0.0275 (limit 0.0668), min scale 0.005
+[PASS] T42 1e30 input spike: finite, recovered after 6 s          max |diff| vs clean run after 6 s = 5.96e-08
+
+RESULT: 53 passed, 0 failed
+== 3b/7 benchmark CPU 1.0.2 vs attuale (stesso Mac) ==
+CPU, % of one core (lower is better). 1.0.3a = meters on (window open), 1.0.3b = meters off (window closed)
+  rate     block  params      1.0.2   1.0.3a   1.0.3b a vs 1.0.2 b vs 1.0.2
+  44100    64     default     1.528    1.024    0.830    -33.0%    -45.7%
+  44100    64     max         1.424    1.110    0.851    -22.1%    -40.3%
+  44100    512    default     1.689    1.204    0.995    -28.7%    -41.1%
+  44100    512    max         1.493    1.252    0.911    -16.1%    -38.9%
+  48000    64     default     1.704    1.349    0.946    -20.8%    -44.5%
+  48000    64     max         1.736    1.343    0.933    -22.7%    -46.3%
+  48000    512    default     1.826    1.351    1.024    -26.1%    -43.9%
+  48000    512    max         1.667    1.243    1.105    -25.4%    -33.7%
+  96000    64     default     3.911    2.814    2.509    -28.1%    -35.8%
+  96000    64     max         3.869    3.144    2.578    -18.7%    -33.4%
+  96000    512    default     3.759    2.881    2.330    -23.4%    -38.0%
+  96000    512    max         3.822    2.808    2.441    -26.5%    -36.1%
+  192000   64     default     8.718    7.057    6.554    -19.1%    -24.8%
+  192000   64     max         8.340    6.812    6.218    -18.3%    -25.4%
+  192000   512    default     8.335    6.954    6.017    -16.6%    -27.8%
+  192000   512    max         8.464    6.799    5.889    -19.7%    -30.4%
+
+Worst block (all parameters at max, 7 repetitions, per-block minimum):
+  1.0.2                   48000 Hz /  32   median block  0.98 %   worst block   7.32 %   worst/median 7.46
+  1.0.3 meters on         48000 Hz /  32   median block  0.84 %   worst block   1.94 %   worst/median 2.30
+  1.0.3 meters off        48000 Hz /  32   median block  0.65 %   worst block   1.69 %   worst/median 2.61
+  1.0.2                   48000 Hz / 128   median block  0.96 %   worst block   4.16 %   worst/median 4.35
+  1.0.3 meters on         48000 Hz / 128   median block  0.83 %   worst block   1.87 %   worst/median 2.25
+  1.0.3 meters off        48000 Hz / 128   median block  0.64 %   worst block   1.63 %   worst/median 2.54
+  1.0.2                   96000 Hz /  32   median block  1.96 %   worst block  14.58 %   worst/median 7.43
+  1.0.3 meters on         96000 Hz /  32   median block  1.69 %   worst block   4.19 %   worst/median 2.48
+  1.0.3 meters off        96000 Hz /  32   median block  1.30 %   worst block   3.71 %   worst/median 2.86
+  1.0.2                   96000 Hz / 128   median block  1.92 %   worst block  11.41 %   worst/median 5.96
+  1.0.3 meters on         96000 Hz / 128   median block  1.67 %   worst block   4.14 %   worst/median 2.48
+  1.0.3 meters off        96000 Hz / 128   median block  1.29 %   worst block   3.77 %   worst/median 2.92
+== 4/7 produttore e firma ==
+AU name: TSR Audio: TSR PHASE DEPTH MOTION
+build-mac/TSRPhaseDepthMotion_artefacts/Release/AU/TSR PHASE DEPTH MOTION.component: replacing existing signature
+build-mac/TSRPhaseDepthMotion_artefacts/Release/VST3/TSR PHASE DEPTH MOTION.vst3: replacing existing signature
+build-mac/TSRPhaseDepthMotion_artefacts/Release/Standalone/TSR PHASE DEPTH MOTION.app: replacing existing signature
+== 5/7 auval (formato Apple) ==
+--------------------------------------------------
+AU VALIDATION SUCCEEDED.
+--------------------------------------------------
+== 6/7 pluginval strictness 10 (VST3 e AU) ==
+2026-10-14 16:33:47.885 pluginval[13054:37746] WARNING: Secure coding is automatically enabled for restorable state! However, not on all supported macOS versions of this application. Opt-in to secure coding explicitly by implementing NSApplicationDelegate.applicationSupportsSecureRestorableState:.
+Completed tests in pluginval / Fuzz parameters
+SUCCESS
+2026-10-14 16:34:28.874 pluginval[14066:40413] WARNING: Secure coding is automatically enabled for restorable state! However, not on all supported macOS versions of this application. Opt-in to secure coding explicitly by implementing NSApplicationDelegate.applicationSupportsSecureRestorableState:.
+Completed tests in pluginval / Fuzz parameters
+SUCCESS
+== 7/7 installer .pkg + zip ==
+pkgbuild: Inferring bundle components from contents of /var/folders/s6/5hzmn6lx4dz5nxs7k_0slzph0000gn/T/tmp.HZ35nb2lrW/au
+pkgbuild: Adding component at TSR PHASE DEPTH MOTION.component
+pkgbuild: Adding top-level postinstall script
+pkgbuild: Wrote package to /var/folders/s6/5hzmn6lx4dz5nxs7k_0slzph0000gn/T/tmp.HZ35nb2lrW/au.pkg
+pkgbuild: Inferring bundle components from contents of /var/folders/s6/5hzmn6lx4dz5nxs7k_0slzph0000gn/T/tmp.HZ35nb2lrW/vst3
+pkgbuild: Adding component at TSR Audio/TSR PHASE DEPTH MOTION.vst3
+pkgbuild: Wrote package to /var/folders/s6/5hzmn6lx4dz5nxs7k_0slzph0000gn/T/tmp.HZ35nb2lrW/vst3.pkg
+pkgbuild: Inferring bundle components from contents of /var/folders/s6/5hzmn6lx4dz5nxs7k_0slzph0000gn/T/tmp.HZ35nb2lrW/app
+pkgbuild: Adding component at TSR Audio/TSR PHASE DEPTH MOTION.app
+pkgbuild: Wrote package to /var/folders/s6/5hzmn6lx4dz5nxs7k_0slzph0000gn/T/tmp.HZ35nb2lrW/app.pkg
+productbuild: Wrote product to dist/TSR PHASE DEPTH MOTION 1.0.4 (TSR Audio).pkg
+/Library/Audio/Plug-Ins/Components/TSR PHASE DEPTH MOTION.component
+/Library/Audio/Plug-Ins/VST3/TSR Audio/TSR PHASE DEPTH MOTION.vst3
+/Applications/TSR Audio/TSR PHASE DEPTH MOTION.app
+OK: dist/TSR PHASE DEPTH MOTION 1.0.4 (TSR Audio).pkg

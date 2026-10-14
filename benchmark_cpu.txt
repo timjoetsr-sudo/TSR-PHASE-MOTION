@@ -1,0 +1,32 @@
+CPU, % of one core (lower is better). 1.0.3a = meters on (window open), 1.0.3b = meters off (window closed)
+  rate     block  params      1.0.2   1.0.3a   1.0.3b a vs 1.0.2 b vs 1.0.2
+  44100    64     default     1.528    1.024    0.830    -33.0%    -45.7%
+  44100    64     max         1.424    1.110    0.851    -22.1%    -40.3%
+  44100    512    default     1.689    1.204    0.995    -28.7%    -41.1%
+  44100    512    max         1.493    1.252    0.911    -16.1%    -38.9%
+  48000    64     default     1.704    1.349    0.946    -20.8%    -44.5%
+  48000    64     max         1.736    1.343    0.933    -22.7%    -46.3%
+  48000    512    default     1.826    1.351    1.024    -26.1%    -43.9%
+  48000    512    max         1.667    1.243    1.105    -25.4%    -33.7%
+  96000    64     default     3.911    2.814    2.509    -28.1%    -35.8%
+  96000    64     max         3.869    3.144    2.578    -18.7%    -33.4%
+  96000    512    default     3.759    2.881    2.330    -23.4%    -38.0%
+  96000    512    max         3.822    2.808    2.441    -26.5%    -36.1%
+  192000   64     default     8.718    7.057    6.554    -19.1%    -24.8%
+  192000   64     max         8.340    6.812    6.218    -18.3%    -25.4%
+  192000   512    default     8.335    6.954    6.017    -16.6%    -27.8%
+  192000   512    max         8.464    6.799    5.889    -19.7%    -30.4%
+
+Worst block (all parameters at max, 7 repetitions, per-block minimum):
+  1.0.2                   48000 Hz /  32   median block  0.98 %   worst block   7.32 %   worst/median 7.46
+  1.0.3 meters on         48000 Hz /  32   median block  0.84 %   worst block   1.94 %   worst/median 2.30
+  1.0.3 meters off        48000 Hz /  32   median block  0.65 %   worst block   1.69 %   worst/median 2.61
+  1.0.2                   48000 Hz / 128   median block  0.96 %   worst block   4.16 %   worst/median 4.35
+  1.0.3 meters on         48000 Hz / 128   median block  0.83 %   worst block   1.87 %   worst/median 2.25
+  1.0.3 meters off        48000 Hz / 128   median block  0.64 %   worst block   1.63 %   worst/median 2.54
+  1.0.2                   96000 Hz /  32   median block  1.96 %   worst block  14.58 %   worst/median 7.43
+  1.0.3 meters on         96000 Hz /  32   median block  1.69 %   worst block   4.19 %   worst/median 2.48
+  1.0.3 meters off        96000 Hz /  32   median block  1.30 %   worst block   3.71 %   worst/median 2.86
+  1.0.2                   96000 Hz / 128   median block  1.92 %   worst block  11.41 %   worst/median 5.96
+  1.0.3 meters on         96000 Hz / 128   median block  1.67 %   worst block   4.14 %   worst/median 2.48
+  1.0.3 meters off        96000 Hz / 128   median block  1.29 %   worst block   3.77 %   worst/median 2.92

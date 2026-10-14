@@ -1,0 +1,1 @@
+Architectures in the fat file: build-mac/TSRPhaseDepthMotion_artefacts/Release/AU/TSR PHASE DEPTH MOTION.component/Contents/MacOS/TSR PHASE DEPTH MOTION are: x86_64 arm64 
