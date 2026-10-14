@@ -36,6 +36,7 @@ constexpr int kBaseLatency = kFirTaps / 2 - 1;   // 15 samples, constant: room f
 constexpr double kKaiserBeta = 7.0;              // window: <= 0.002 dB error to 18 kHz @44.1k and to 20 kHz @48k
 constexpr double kMaxLagMs = 1.0;    // max phase-alignment correction
 constexpr int kChunk = 256;          // internal processing chunk
+constexpr float kInMax = 64.f;       // 1.0.4: input clamp (+36 dBFS): a blown-up upstream plugin no longer bends the state for minutes
 inline double belowNyquist(double fs, double f) { return std::min(f, 0.45 * fs); }   // 1.0.3: fs = 8 kHz made NaN/Inf
 
 enum Mode { MODE_PHASE = 0, MODE_DEPTH, MODE_MOTION, MODE_VOCAL, MODE_DRUMS, MODE_MUSIC };
@@ -534,7 +535,7 @@ public:
         applyAt = hop / 2;
         {   const double total = (double) kPrepUnits * (win - 2 * maxLag) + (double) (2 * maxLag + 1) * (win - 2 * maxLag) + (kAp + 1) * (double) kCandUnits * win;
             jobBudget = (long) std::ceil(total / std::max(1, applyAt - kChunk)) + 1; }
-        frameDecay = std::exp(-(double) kFrame / (0.100 * fs));
+        frameDecay = std::exp(-(double) kFrame / (kSafeMomSec * fs));
         corrBuf.assign((size_t) (2 * maxLag + 1), 0.0); corrAvg.assign((size_t) (2 * maxLag + 1), 0.0); eyLag.assign((size_t) (2 * maxLag + 1), 0.0);
         avgA = std::exp(-(double) hop / (4.0 * fs));   // tau 4 s
         aMeter = std::exp(-1.0 / (0.300 * fs));
@@ -665,6 +666,9 @@ private:
     static constexpr int kCons = 10, kRelease = 6;
     double lagHist[kCons] = {}; int lagPos = 0, lagN = 0, incons = 0, apWantPrev = -2, apWantCount = 0;
     // fail-safe on a fixed 64-sample grid (host block size independent)
+    // 1.0.4: second moments over 300 ms (was 100 ms) and a 20 ms fall: on a finished mix (NEON) the width pumped 16.5 times/min
+    // below 70 %, now 9.0; drum hits no longer pull WIDTH/MOTION back (RIM mean reduction 10.2 % -> ~0.5 %)
+    static constexpr double kSafeMomSec = 0.300, kSafeAttackSec = 0.020;
     static constexpr int kFrame = 64; double frameAcc[10] = {0}; int framePos = 0; float sStart = 1.f, sEnd = 1.f; double frameDecay = 0.99;
     float monG[3] = {0.f, 1.f, 0.f}; float bypG = 0.f;
     std::vector<double> corrBuf, corrAvg; double avgA = 0.98, avgPow = 1;   // corrAvg: long-term correlation (1.0.3)
@@ -934,8 +938,8 @@ private:
 
         for (int i = 0; i < n; ++i) {
             float xl = L[i], xr = R[i];
-            if (!std::isfinite(xl)) xl = 0;
-            if (!std::isfinite(xr)) xr = 0;
+            if (!std::isfinite(xl)) xl = 0; else if (std::fabs(xl) > kInMax) xl = std::copysign(kInMax, xl);
+            if (!std::isfinite(xr)) xr = 0; else if (std::fabs(xr) > kInMax) xr = std::copysign(kInMax, xr);   // 1.0.4: +36 dBFS clamp
             inL[i] = xl; inR[i] = xr;
             dryL.push(xl); dryR.push(xr);
             ddL[i] = dryL.at(kBaseLatency); ddR[i] = dryR.at(kBaseLatency);
@@ -1048,7 +1052,10 @@ private:
                 for (int j = 0; j < 10; ++j) { mom[j] = frameDecay * mom[j] + (1 - frameDecay) * (frameAcc[j] / kFrame); frameAcc[j] = 0; }
                 sStart = sEnd; sPrev = sStart;
                 float sTarget = solveScale(P.monoSafety);
-                sEnd = sTarget < sStart ? sTarget : (float) std::min<double>(sTarget, sStart + kFrame / (0.4 * fs));
+                // 1.0.4: the scale falls over at least kSafeAttackSec instead of within one 64-sample frame (no more steps of
+                // the side level on drum hits); it still recovers over 0.4 s
+                sEnd = sTarget < sStart ? (float) std::max<double>(sTarget, sStart - kFrame / (kSafeAttackSec * fs))
+                                        : (float) std::min<double>(sTarget, sStart + kFrame / (0.4 * fs));
             }
             float oL = bL[i] + s * dL[i], oR = bR[i] + s * dR[i];
             if (mOn) meterSample(inL[i], inR[i], oL, oR);
@@ -1087,7 +1094,7 @@ private:
         double allowed = allowedMonoDeltaDb(monoSafety);
         double floorC = correlationFloor(monoSafety);
         // Correlation target. Material above the floor may be widened down to the floor (+0.06 margin: the predictor uses
-        // 100 ms EMA moments, the promise holds on any 100 ms window). Material already below the floor may only lose a
+        // 300 ms EMA moments (1.0.4; was 100 ms), the promise holds on 300 ms windows). Material already below the floor may only lose a
         // small, MONO SAFETY-dependent amount relative to its own correlation. s = 0 always satisfies both constraints
         // (bug fixed in 1.0.1: the old rule could require the correlation to RISE, blocking every move on wide material).
         // never push healthy stereo below +0.30 (where the integrity score starts to fall); below that, no extra drop

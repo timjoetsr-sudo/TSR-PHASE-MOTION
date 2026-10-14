@@ -1,3 +1,25 @@
+## 1.0.4 — MONO SAFETY senza pompaggio, ingresso protetto
+
+Misurato contro la 1.0.3 sulla stessa macchina, sul brano di prova NEON (mix finito, −7,8 LUFS) e sui 20 stem.
+
+- **MONO SAFETY non pompa più la larghezza.** L'analisi usa 300 ms invece di 100 ms e la riduzione scende in almeno 20 ms
+  invece che in un blocco di 64 campioni (circa 1,3 ms); la risalita resta 0,4 s.
+  - NEON ai default: la larghezza scende sotto il 70 % 9,0 volte al minuto invece di 16,5; modulazione 1–10 Hz
+    0,114 → 0,095; riduzione media 17,7 % → 14,4 %; cadute brusche (> 30 % in un blocco) 5,1 → 0 al minuto.
+  - Percussioni: i colpi non tirano più indietro WIDTH e MOTION. RIM 10,2 % → 0,1 % di riduzione media,
+    OPEN HAT 6,2 % → 0,4 %, SNARE 4,2 % → 0,0 %.
+  - Stem molto larghi: riduzione più stabile ma più alta (PIANO 80,6 % → 89,7 %, PAD_2 85,0 % → 91,8 %).
+  - Costo: la protezione è garantita su finestre di 300 ms invece che di 100 ms. Finestre di 100 ms con perdita in mono
+    oltre −1,6 dB su materiale sano: NEON 2,31 % → 2,46 % del tempo, PAD 5,17 % → 5,72 %; il caso peggiore resta uguale
+    (NEON −3,14 dB in entrambe).
+- **Ingresso limitato a ±64 (+36 dBFS).** Un singolo campione assurdo (1e30, per esempio da un plugin precedente andato in
+  instabilità) alterava lo stato per decine di secondi: 30 s dopo il picco l'uscita era ancora diversa (picco 1,17 invece
+  di 0,95). Ora l'uscita torna identica alla versione senza il picco; NaN e Inf erano già gestiti.
+- Tutto il resto è identico alla 1.0.3: con MONO SAFETY a 0 % e senza ritardo PHASE in uso l'uscita è identica bit per bit
+  alla 1.0.2 (T37). CPU invariata (NEON ai default, 48 kHz: 1,83 % → 1,90 % di un core, nel rumore della misura).
+- Nuovi test T41 (discesa di MONO SAFETY ≥ 20 ms, protezione ancora attiva) e T42 (recupero dopo un picco 1e30):
+  EngineTests da 51 a 53.
+
 ## 1.0.3 — PHASE più preciso e più stabile, meno CPU, automazioni pulite
 
 Tutto misurato contro la 1.0.2 sulla stessa macchina, con una copia congelata del motore 1.0.2 (`tests/ref/`).

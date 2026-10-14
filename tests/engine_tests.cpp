@@ -477,14 +477,15 @@ int main() {
             long k = 0; for (size_t i = 0; i < L.size(); ++i) k += (L[i] != Lr[i]) + (R[i] != Rr[i]); diff += k; d += fmt("bs%.0f:%.0f ", bs, (double) k); }
         check(diff == 0, "T36 defaults: bit-identical for block sizes 1..4096", d + "(differing samples)");
     }
-    {   // T37: 1.0.3 == 1.0.2 (output delayed by the 13 extra samples of latency) whenever no fractional PHASE delay is applied
+    {   // T37: current == 1.0.2 (output delayed by the 13 extra samples of latency) whenever no fractional PHASE delay is applied
+        // and MONO SAFETY is off (1.0.4 changed only the MONO SAFETY time constants and the input clamp at +36 dBFS)
         bool ok = true; std::string d;
         for (int cfg = 0; cfg < 3; ++cfg) {
             auto [L0, R0] = stereoMix(160 + (uint64_t) cfg, 0.7f);
-            Params p; tsr_v102::Params q;
+            Params p; tsr_v102::Params q; p.monoSafety = q.monoSafety = 0;
             if (cfg == 1) { p.mode = MODE_MUSIC; q.mode = tsr_v102::MODE_MUSIC; }
-            if (cfg == 2) { p.coherence = q.coherence = 1; p.depth = q.depth = 1; p.earlyLate = q.earlyLate = 1; p.width = q.width = 2; p.motion = q.motion = 1;
-                            p.monoSafety = q.monoSafety = 0.5f; p.centerLock = q.centerLock = 0; p.depthGuard = q.depthGuard = 0.3f; }
+            if (cfg == 2) { p.coherence = q.coherence = 1; p.depth = q.depth = 1; p.earlyLate = q.earlyLate = 1; p.width = q.width = 1; p.motion = q.motion = 0;   // no widening move: the fail-safe has nothing to scale
+                            p.centerLock = q.centerLock = 0; p.depthGuard = q.depthGuard = 0.3f; }
             SpatialEngine a; a.prepare(fs, 512); tsr_v102::SpatialEngine b; b.prepare(fs, 512);
             Buf La = L0, Ra = R0, Lb = L0, Rb = R0; run(a, La, Ra, p);
             for (size_t o = 0; o < Lb.size(); o += 512) b.process(Lb.data() + o, Rb.data() + o, (int) std::min<size_t>(512, Lb.size() - o), q);
@@ -492,7 +493,7 @@ int main() {
             for (size_t i = 0; i + (size_t) sh < La.size(); ++i) k += (La[i + (size_t) sh] != Lb[i]) + (Ra[i + (size_t) sh] != Rb[i]);
             ok &= k == 0 && a.meters.appliedDelayMs.load() == 0.f; d += fmt("cfg%.0f:%.0f ", cfg, (double) k);
         }
-        check(ok, "T37 1.0.3 == 1.0.2 bit for bit (no PHASE delay in use)", d + "(differing samples)");
+        check(ok, "T37 == 1.0.2 bit for bit (no PHASE delay, MONO SAFETY off)", d + "(differing samples)");
     }
     {   // T38: lag estimate precision (1.0.2 parabola: 0.107 samples off at quarter-sample lags)
         double worst = 0; std::string d;
@@ -550,6 +551,25 @@ int main() {
         double ca, cb, oa, ob; long ba = hold(a, pa, ca, oa), bb = hold(b, pb, cb, ob);
         check(ba == 0 && ca <= 1.0, "T40 hi-hat bursts, 2 mics: lag held, |r| <= 1",
               fmt("1.0.3: blocks off-target %.0f, max conf %.3f | 1.0.2: blocks off-target %.0f, ", (double) ba, ca, (double) bb) + fmt("max conf %.1f", cb));
+    }
+    {   // T41 (1.0.4): MONO SAFETY falls over >= 20 ms (no 64-sample steps) and still reaches a deep reduction on wide material
+        Buf L((size_t) (6 * fs)), R((size_t) (6 * fs)); Rng g; g.s ^= 410;
+        for (size_t i = 0; i < L.size(); ++i) { const double c = g.g() * 0.2; const bool wide = i >= (size_t) (3 * fs);
+            L[i] = (float) (wide ? g.g() * 0.2 : c); R[i] = (float) (wide ? g.g() * 0.2 : c + 0.02 * g.g()); }
+        SpatialEngine e; e.prepare(fs, 64); Params p; p.width = 2; p.motion = 1; double worstStep = 0, minS = 1; float prev = 1;
+        for (size_t o = 0; o < L.size(); o += 64) { e.process(L.data() + o, R.data() + o, 64, p); const float s1 = e.meters.safeScale.load();
+            if (o > (size_t) fs) { worstStep = std::max(worstStep, (double) (prev - s1)); minS = std::min(minS, (double) s1); } prev = s1; }
+        const double maxStep = 64.0 / (0.020 * fs) + 1e-4;
+        check(worstStep <= maxStep && minS < 0.2, "T41 MONO SAFETY: fall >= 20 ms, still protects wide input", fmt("largest fall per 64 samples %.4f (limit %.4f), min scale %.3f", worstStep, maxStep, minS));
+    }
+    {   // T42 (1.0.4): one absurd input sample (1e30, e.g. a blown-up plugin before this one) must not bend the state for long
+        Buf L0((size_t) (10 * fs)), R0((size_t) (10 * fs)); Rng g; g.s ^= 420;
+        for (size_t i = 0; i < L0.size(); ++i) { const double c = g.g() * 0.2; L0[i] = (float) (c + 0.05 * g.g()); R0[i] = (float) (c + 0.05 * g.g()); }
+        Buf La = L0, Ra = R0, Lb = L0, Rb = R0; Lb[(size_t) fs] = 1e30f;
+        SpatialEngine a, b; a.prepare(fs, 512); b.prepare(fs, 512); Params p; run(a, La, Ra, p); run(b, Lb, Rb, p);
+        double d = 0; for (size_t i = (size_t) (fs * 7); i < La.size(); ++i) d = std::max(d, (double) std::max(std::fabs(La[i] - Lb[i]), std::fabs(Ra[i] - Rb[i])));
+        bool fin = true; for (size_t i = 0; i < Lb.size(); ++i) fin &= std::isfinite(Lb[i]) && std::isfinite(Rb[i]);
+        check(fin && d < 1e-3, "T42 1e30 input spike: finite, recovered after 6 s", fmt("max |diff| vs clean run after 6 s = %.2e", d));
     }
     std::printf("\nRESULT: %d passed, %d failed\n", gPass, gFail);
     return gFail ? 1 : 0;
