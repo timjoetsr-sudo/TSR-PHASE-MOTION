@@ -52,6 +52,9 @@ target_link_libraries(TSRPhaseDepthMotion PRIVATE TSRPDMBinary juce::juce_audio_
 add_executable(EngineTests tests/engine_tests.cpp)
 # ---- CPU benchmark 1.0.2 (tests/ref) vs current engine, same binary: ./EngineBench
 add_executable(EngineBench tests/bench.cpp)
+# ---- DSP quality harness (headless): ./build/tests/tsr_dsp_tests > tsr_dsp_metrics.csv
+add_executable(tsr_dsp_tests tests/dsp_metrics.cpp)
+set_target_properties(tsr_dsp_tests PROPERTIES RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/tests)
 
 # ---- host test tool (Linux/macOS): loads the BUILT VST3 through JUCE hosting and tests it
 option(TSR_BUILD_HOSTTESTS "Build VST3 host test tool" OFF)
